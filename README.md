@@ -25,7 +25,7 @@
 | ![SolidLine](screenshot/solid_line.png) | ![Sparkle](screenshot/sparkle.png) | ![FadingBlock](screenshot/fading_block.png) |
 
 ---
-<div align="center">
+
 ## 🚀 Features
 
 - 🎨 **9 Unique Rendering Styles**: From classic WaveForms to cyber Matrix effects.
