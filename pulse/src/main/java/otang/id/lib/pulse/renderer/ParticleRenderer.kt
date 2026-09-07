@@ -18,8 +18,10 @@ import android.graphics.Paint as NativePaint
 
 @Composable
 fun ParticleRenderer(
-    fft: FloatArray,
+    fft: ByteArray,
     barColor: Color? = null,
+    maxMagnitude: Float = 128f,
+    heightScale: Float = 1f,
     modifier: Modifier
 ) {
     val color = barColor ?: MaterialTheme.colorScheme.primary
@@ -31,8 +33,7 @@ fun ParticleRenderer(
 
         if (width <= 0f || height <= 0f) return@Canvas
 
-        // Update fisik partikel
-        particleState.update(fft, width, height)
+        particleState.update(fft, width, height, maxMagnitude, heightScale)
 
         drawIntoCanvas { canvas ->
             particleState.draw(canvas.nativeCanvas, color)
@@ -41,12 +42,13 @@ fun ParticleRenderer(
 }
 
 internal class ParticlePulseState(
-    private val maxParticles: Int = 300,
+    maxParticles: Int = 300,
     private val decayRate: Float = 0.012f,
-    private val audioGate: Float = 0.08f
+    private val audioGate: Float = 0.05f
 ) {
     private val paint = NativePaint(NativePaint.ANTI_ALIAS_FLAG).apply { style = NativePaint.Style.FILL }
     private val particles = Array(maxParticles) { Particle() }
+    private var magnitudes = FloatArray(0)
 
     private var bassIntensity = 0f
     private var midIntensity = 0f
@@ -54,33 +56,37 @@ internal class ParticlePulseState(
     private var audioIntensity = 0f
 
     private class Particle {
-        var x = 0f;
-        var y = 0f;
-        var vx = 0f;
+        var x = 0f
+        var y = 0f
+        var vx = 0f
         var vy = 0f
-        var size = 0f;
-        var life = 1f
+        var size = 0f
+        var life = 0f
     }
 
-    fun update(heights: FloatArray, width: Float, height: Float) {
-        // 1. Kalkulasi Intensitas Audio (Logika dari file lama)
+    fun update(fft: ByteArray, width: Float, height: Float, maxMagnitude: Float, heightScale: Float) {
+        if (magnitudes.size != fft.size / 2) {
+            magnitudes = FloatArray(fft.size / 2)
+        }
+        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, magnitudes)
+        val heights = magnitudes
+
         if (heights.size >= 4) {
-            val peak = heights.maxOrNull() ?: 1f
+            val currentMax = heights.maxOrNull() ?: 1f
+            val peak = max(maxMagnitude * 0.5f, currentMax)
             val bassEnd = max(1, min(heights.size / 4, heights.size))
             val midEnd = max(bassEnd + 1, min((heights.size * 3) / 4, heights.size))
 
-            bassIntensity = bandMean(heights, peak, 0, bassEnd).coerceIn(0f, 1f)
-            midIntensity = bandMean(heights, peak, bassEnd, midEnd).coerceIn(0f, 1f)
-            trebleIntensity = bandMean(heights, peak, midEnd, heights.size).coerceIn(0f, 1f)
-            audioIntensity = ((bassIntensity + midIntensity + trebleIntensity) / 3f).coerceIn(0f, 1f)
+            bassIntensity = (bandMean(heights, peak, 0, bassEnd) * heightScale).coerceIn(0f, 1f)
+            midIntensity = (bandMean(heights, peak, bassEnd, midEnd) * heightScale).coerceIn(0f, 1f)
+            trebleIntensity = (bandMean(heights, peak, midEnd, heights.size) * heightScale).coerceIn(0f, 1f)
+            audioIntensity = ((bassIntensity * 1.5f + midIntensity + trebleIntensity) / 3f).coerceIn(0f, 1f)
         }
 
-        // 2. Spawn Partikel berdasarkan Audio Intensity
         if (audioIntensity > audioGate) {
             spawnBurst(width, height)
         }
 
-        // 3. Update Fisik Partikel
         for (p in particles) {
             p.life -= decayRate
             if (p.life <= 0f) {
@@ -93,15 +99,16 @@ internal class ParticlePulseState(
     }
 
     private fun spawnBurst(width: Float, height: Float) {
-        val burstCount = (audioIntensity * 10).toInt() // Sesuaikan burst
+        var burstCount = (audioIntensity * 15).toInt().coerceAtMost(20)
         for (p in particles) {
             if (p.life <= 0f && burstCount > 0) {
                 p.x = Random.nextFloat() * width
                 p.y = height
-                p.vx = (Random.nextFloat() - 0.5f) * 4f
-                p.vy = -Random.nextFloat() * 5f - 2f
-                p.size = Random.nextFloat() * 8f + 2f
+                p.vx = (Random.nextFloat() - 0.5f) * 6f
+                p.vy = -Random.nextFloat() * 10f - 2f
+                p.size = Random.nextFloat() * 10f + 2f
                 p.life = 1f
+                burstCount--
             }
         }
     }

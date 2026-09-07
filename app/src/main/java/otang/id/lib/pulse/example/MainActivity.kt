@@ -1,32 +1,45 @@
 package otang.id.lib.pulse.example
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import kotlinx.coroutines.delay
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import otang.id.lib.pulse.PulseConfig
+import otang.id.lib.pulse.PulseRenderer
 import otang.id.lib.pulse.PulseView
 import otang.id.lib.pulse.example.ui.theme.PulseComposeTheme
-import kotlin.random.Random
-import kotlin.time.Duration.Companion.milliseconds
-
-val staticDummyFft = floatArrayOf(
-    10f, 45f, 120f, 250f, 300f, 280f, 150f, 80f, // Bass
-    60f, 90f, 110f, 180f, 200f, 160f, 100f, 70f, // Mid
-    50f, 85f, 130f, 140f, 95f, 60f, 40f, 25f,    // High-Mid
-    15f, 30f, 45f, 55f, 35f, 20f, 10f, 5f        // Treble
-)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,33 +53,119 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(UnstableApi::class)
 @Composable
 fun PulseTest() {
-    var dummyHeights by remember { mutableStateOf(FloatArray(32) { 2f }) }
+    val context = LocalContext.current
+    val audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
 
-    // Simulasi update data FFT seolah-olah dari audio engine (setiap ~50ms)
-    LaunchedEffect(Unit) {
-        while (true) {
-            val newHeights = FloatArray(32) { index ->
-                // Membuat pola melengkung di tengah (seperti visualizer umumnya)
-                // dicampur dengan nilai random agar bergerak.
-                // Asumsi max tinggi bar adalah 300f
-                val baseHeight = if (index < 32 / 2) index * 10f else (32 - index) * 10f
-                val randomJitter = Random.nextFloat() * 150f
-
-                baseHeight + randomJitter
-            }
-            dummyHeights = newHeights
-            delay(500L.milliseconds) // Setara dengan ~20 FPS update rate
+    // ExoPlayer State
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(audioUrl))
+            prepare()
         }
     }
+
+    var isPlaying by remember { mutableStateOf(false) }
+    var audioSessionId by remember { mutableIntStateOf(0) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    var hasPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasPermission = isGranted
+    }
+
+    val renderers = PulseRenderer.entries
+    var rendererIndex by remember { mutableStateOf(renderers.indexOf(PulseRenderer.WaveForm).toFloat()) }
+    val currentRenderer = renderers[rendererIndex.toInt().coerceIn(0, renderers.size - 1)]
+
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            PulseView(dummyHeights, modifier = Modifier.fillMaxSize())
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                if (hasPermission) {
+                    PulseView(
+                        audioSessionId = audioSessionId,
+                        modifier = Modifier.fillMaxSize(),
+                        config = PulseConfig(renderer = currentRenderer)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Button(onClick = {
+                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }) {
+                            Text("Grant Record Audio Permission")
+                        }
+                    }
+                }
+            }
+
+            // Controls
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Renderer: ${currentRenderer.name}",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Slider(
+                    value = rendererIndex,
+                    onValueChange = { rendererIndex = it },
+                    valueRange = 0f..(renderers.size - 1).toFloat(),
+                    steps = renderers.size - 2,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
+                Spacer(modifier = Modifier.padding(8.dp))
+
+                Text(text = "Now Playing: SoundHelix-Song-1.mp3")
+
+                Spacer(modifier = Modifier.padding(4.dp))
+
+                Button(onClick = {
+                    if (isPlaying) {
+                        exoPlayer.pause()
+                    } else {
+                        exoPlayer.play()
+                        audioSessionId = exoPlayer.audioSessionId
+                    }
+                    isPlaying = !isPlaying
+                }) {
+                    Text(if (isPlaying) "Pause" else "Play")
+                }
+            }
         }
     }
 }

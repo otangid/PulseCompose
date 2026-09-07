@@ -14,9 +14,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 
 @Composable
 fun WaveFormRenderer(
-    fft: FloatArray,
+    fft: ByteArray,
     barColor: Color? = null,
     barCount: Int = 32,
+    maxMagnitude: Float = 128f,
+    heightScale: Float = 1f,
     showOutline: Boolean = true,
     showFill: Boolean = true,
     modifier: Modifier
@@ -25,7 +27,7 @@ fun WaveFormRenderer(
     val state = remember(barCount) { WaveformPulseState(barCount) }
 
     Canvas(modifier = modifier.fillMaxSize()) {
-        state.update(fft)
+        state.update(fft, size.height, maxMagnitude, heightScale)
         state.draw(
             drawScope = this,
             width = size.width,
@@ -45,13 +47,17 @@ internal class WaveformPulseState(private val barCount: Int) {
     private val waveformPath = Path()
     private val fillPath = Path()
 
-    fun update(heights: FloatArray) {
-        val count = minOf(heights.size, barCount)
-        if (targetHeights.size != count) {
-            targetHeights = FloatArray(count)
-            currentHeights = FloatArray(count) { 2f }
+    fun update(fft: ByteArray, viewHeight: Float, maxMagnitude: Float, heightScale: Float) {
+        if (targetHeights.size != barCount) {
+            targetHeights = FloatArray(barCount)
+            currentHeights = FloatArray(barCount) { 2f }
         }
-        System.arraycopy(heights, 0, targetHeights, 0, count)
+        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, targetHeights)
+
+        for (i in 0 until targetHeights.size) {
+            val normalized = targetHeights[i] / maxMagnitude
+            targetHeights[i] = (normalized * viewHeight * heightScale).coerceIn(2f, viewHeight)
+        }
     }
 
     fun draw(
@@ -69,7 +75,6 @@ internal class WaveformPulseState(private val barCount: Int) {
         waveformPath.reset()
         fillPath.reset()
 
-        // Kalkulasi titik dan path
         for (i in 0 until count) {
             val target = targetHeights[i]
             val current = currentHeights[i]
@@ -97,7 +102,6 @@ internal class WaveformPulseState(private val barCount: Int) {
         fillPath.lineTo(width, height)
         fillPath.close()
 
-        // Render Fill
         if (showFill) {
             drawScope.drawPath(
                 path = fillPath,
@@ -106,7 +110,6 @@ internal class WaveformPulseState(private val barCount: Int) {
             )
         }
 
-        // Render Outline
         if (showOutline) {
             drawScope.drawPath(
                 path = waveformPath,

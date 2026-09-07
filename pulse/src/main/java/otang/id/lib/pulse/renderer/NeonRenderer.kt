@@ -17,9 +17,11 @@ import android.graphics.Paint as NativePaint
 
 @Composable
 fun NeonRenderer(
-    fft: FloatArray,
+    fft: ByteArray,
     barColor: Color? = null,
     barCount: Int = 32,
+    maxMagnitude: Float = 128f,
+    heightScale: Float = 1f,
     barGapPx: Float = 2f,
     modifier: Modifier
 ) {
@@ -32,8 +34,8 @@ fun NeonRenderer(
 
         if (width <= 0f || height <= 0f || barCount <= 0) return@Canvas
 
-        neonState.checkAndResize(width, height, barCount, barGapPx)
-        neonState.updateData(fft)
+        neonState.checkAndResize(width, height, barCount, gapPx = barGapPx)
+        neonState.updateData(fft, height, maxMagnitude, heightScale)
 
         drawIntoCanvas { canvas ->
             neonState.draw(canvas.nativeCanvas, height, color)
@@ -50,7 +52,7 @@ internal class NeonPulseState {
     private val corePaint = NativePaint(NativePaint.ANTI_ALIAS_FLAG).apply {
         style = NativePaint.Style.STROKE
         strokeCap = NativePaint.Cap.ROUND
-        color = android.graphics.Color.argb(255, 255, 255, 255) // Inti selalu putih (terang)
+        color = android.graphics.Color.argb(255, 255, 255, 255)
     }
 
     private var pointsX = FloatArray(0)
@@ -94,20 +96,23 @@ internal class NeonPulseState {
         }
     }
 
-    fun updateData(heights: FloatArray) {
-        val count = minOf(heights.size, lastBarCount)
-        if (targetHeights.size != count) {
-            targetHeights = FloatArray(count)
-            currentHeights = FloatArray(count) { 2f }
+    fun updateData(fft: ByteArray, viewHeight: Float, maxMagnitude: Float, heightScale: Float) {
+        if (targetHeights.size != lastBarCount) {
+            targetHeights = FloatArray(lastBarCount)
+            currentHeights = FloatArray(lastBarCount) { 2f }
         }
-        System.arraycopy(heights, 0, targetHeights, 0, count)
+        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, targetHeights)
+
+        for (i in 0 until targetHeights.size) {
+            val normalized = targetHeights[i] / maxMagnitude
+            targetHeights[i] = (normalized * viewHeight * heightScale).coerceIn(2f, viewHeight)
+        }
     }
 
     fun draw(canvas: NativeCanvas, viewHeight: Float, barColor: Color) {
         val count = minOf(lastBarCount, currentHeights.size, pointsX.size)
         if (count <= 0) return
 
-        // Mencegah alokasi ulang objek Color & BlurMaskFilter secara berulang
         val colorArgb = barColor.toArgb()
         if (colorArgb != lastColorArgb) {
             lastColorArgb = colorArgb
@@ -131,14 +136,11 @@ internal class NeonPulseState {
             currentHeights[i] = h
 
             val x = pointsX[i]
-            val y1 = viewHeight
-            val y0 = y1 - h
+            val y0 = viewHeight - h
 
-            // Gambar efek glow di belakang
-            canvas.drawLine(x, y1, x, y0, glowPaint)
+            canvas.drawLine(x, viewHeight, x, y0, glowPaint)
 
-            // Gambar inti putih solid di depan
-            canvas.drawLine(x, y1, x, y0, corePaint)
+            canvas.drawLine(x, viewHeight, x, y0, corePaint)
         }
     }
 }

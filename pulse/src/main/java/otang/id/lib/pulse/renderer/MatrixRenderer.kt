@@ -16,12 +16,13 @@ import android.graphics.Paint as NativePaint
 
 @Composable
 fun MatrixRenderer(
-    fft: FloatArray,
+    fft: ByteArray,
     barCount: Int = 32,
+    maxMagnitude: Float = 128f,
+    heightScale: Float = 1f,
     barGapPx: Float = 2f,
     modifier: Modifier
 ) {
-    // Menyimpan state visualizer agar tidak ter-reset saat Compose melakukan Recomposition
     val matrixState = remember { MatrixPulseState() }
 
     Canvas(modifier = modifier.fillMaxSize()) {
@@ -30,13 +31,10 @@ fun MatrixRenderer(
 
         if (width <= 0 || height <= 0 || barCount <= 0) return@Canvas
 
-        // Update ukuran, alokasi array, dan kalkulasi font size hanya jika ukuran berubah
         matrixState.checkAndResize(width, height, barCount, barGapPx)
 
-        // Update target ketinggian berdasarkan data FFT terbaru
-        matrixState.updateData(fft)
+        matrixState.updateData(fft, height, maxMagnitude, heightScale)
 
-        // Menggunakan nativeCanvas untuk performa ekstrim rendering teks & blur mask
         drawIntoCanvas { canvas ->
             matrixState.draw(canvas.nativeCanvas, height)
         }
@@ -130,18 +128,22 @@ internal class MatrixPulseState {
         }
     }
 
-    fun updateData(heights: FloatArray) {
-        if (heights.size != targetHeights.size) {
-            targetHeights = FloatArray(heights.size)
-            currentHeights = FloatArray(heights.size) { 2f }
+    fun updateData(fft: ByteArray, viewHeight: Float, maxMagnitude: Float, heightScale: Float) {
+        if (targetHeights.size != lastBarCount) {
+            targetHeights = FloatArray(lastBarCount)
+            currentHeights = FloatArray(lastBarCount) { 2f }
         }
-        System.arraycopy(heights, 0, targetHeights, 0, minOf(heights.size, targetHeights.size))
+        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, targetHeights)
+
+        for (i in 0 until targetHeights.size) {
+            val normalized = targetHeights[i] / maxMagnitude
+            targetHeights[i] = (normalized * viewHeight * heightScale).coerceIn(2f, viewHeight)
+        }
     }
 
     fun draw(canvas: NativeCanvas, viewHeight: Float) {
         val count = minOf(lastBarCount, barColumns.size, currentHeights.size, targetHeights.size)
 
-        // Smoothing tinggi bar
         for (i in 0 until count) {
             val target = targetHeights[i]
             val current = currentHeights[i]
@@ -164,9 +166,7 @@ internal class MatrixPulseState {
             if (height < 10f) continue
 
             val x = i * fullBarWidth + columnWidth * 0.5f
-            val baseY = viewHeight
 
-            // Randomize karakter angka ("Matrix effect")
             if (shouldChange && Random.nextFloat() < 0.4f) {
                 column.regenerateRandomChars()
             }
@@ -176,24 +176,21 @@ internal class MatrixPulseState {
 
             column.ensureCapacity(numChars)
 
-            // Menggambar Glow di belakang teks
             val glowWidth = columnWidth * 0.85f
             val heightRatio = height / viewHeight
             val glowAlpha = (160 * heightRatio).toInt().coerceIn(0, 160)
 
-            // Mutasi color property pada native paint jauh lebih cepat dan tidak memakan garbage collector
             glowPaint.color = android.graphics.Color.argb(glowAlpha, 0, 200, 50)
             canvas.drawRect(
                 x - glowWidth / 2f,
-                baseY - height,
+                viewHeight - height,
                 x + glowWidth / 2f,
-                baseY,
+                viewHeight,
                 glowPaint
             )
 
-            // Menggambar susunan karakter matrix
             for (j in 0 until numChars) {
-                val y = baseY - (j * charSpacingWithGap) - charSize * 0.25f
+                val y = viewHeight - (j * charSpacingWithGap) - charSize * 0.25f
                 val char = column.chars[j % column.chars.size]
 
                 val fadeRatio = j.toFloat() / numChars.coerceAtLeast(1)

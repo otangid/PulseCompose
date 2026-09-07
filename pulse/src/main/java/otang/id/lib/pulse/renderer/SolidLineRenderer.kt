@@ -1,5 +1,6 @@
 package otang.id.lib.pulse.renderer
 
+import android.graphics.Canvas
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -7,8 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.NativeCanvas
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -16,9 +15,11 @@ import kotlin.math.max
 
 @Composable
 fun SolidLineRenderer(
-    fft: FloatArray,
+    fft: ByteArray,
     barColor: Color? = null,
     barCount: Int = 32,
+    maxMagnitude: Float = 128f,
+    heightScale: Float = 1f,
     barGapPx: Float = 2f,
     isRoundedBarsEnabled: Boolean = true,
     modifier: Modifier
@@ -33,7 +34,7 @@ fun SolidLineRenderer(
         if (width <= 0f || height <= 0f || barCount <= 0) return@Canvas
 
         rendererState.updateConfig(barCount, barGapPx, isRoundedBarsEnabled)
-        rendererState.updateData(fft)
+        rendererState.updateData(fft, height, maxMagnitude, heightScale)
         drawIntoCanvas { canvas ->
             rendererState.draw(canvas.nativeCanvas, width, height, color)
         }
@@ -45,7 +46,6 @@ internal class SolidLinePulseState {
         style = android.graphics.Paint.Style.FILL
     }
 
-    private val path = Path()
     private var currentHeights = FloatArray(0)
     private var targetHeights = FloatArray(0)
 
@@ -60,15 +60,20 @@ internal class SolidLinePulseState {
         isRounded = rounded
     }
 
-    fun updateData(heights: FloatArray) {
+    fun updateData(fft: ByteArray, viewHeight: Float, maxMagnitude: Float, heightScale: Float) {
         if (targetHeights.size != barCount) {
             targetHeights = FloatArray(barCount)
             currentHeights = FloatArray(barCount) { 2f }
         }
-        System.arraycopy(heights, 0, targetHeights, 0, minOf(heights.size, barCount))
+        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, targetHeights)
+
+        for (i in 0 until targetHeights.size) {
+            val normalized = targetHeights[i] / maxMagnitude
+            targetHeights[i] = (normalized * viewHeight * heightScale).coerceIn(2f, viewHeight)
+        }
     }
 
-    fun draw(canvas: NativeCanvas, width: Float, height: Float, color: Color) {
+    fun draw(canvas: Canvas, width: Float, height: Float, color: Color) {
         paint.color = color.toArgb()
 
         val totalGap = (barCount - 1) * gap
@@ -89,8 +94,6 @@ internal class SolidLinePulseState {
             val top = height - h
 
             if (isRounded) {
-                // Menggunakan Native Canvas untuk drawPath yang lebih efisien jika perlu
-                // Namun di sini kita bisa menggunakan Compose Path yang dibungkus
                 val rect = android.graphics.RectF(left, top, left + barWidth, height)
                 val radii = floatArrayOf(32f, 32f, 32f, 32f, 0f, 0f, 0f, 0f)
                 val p = android.graphics.Path()

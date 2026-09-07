@@ -19,9 +19,11 @@ import android.graphics.Paint as NativePaint
 
 @Composable
 fun FadingBlockRenderer(
-    fft: FloatArray,
+    fft: ByteArray,
     barColor: Color? = null,
     barCount: Int = 32,
+    maxMagnitude: Float = 128f,
+    heightScale: Float = 1f,
     barGapPx: Float = 2f,
     filledBlockSize: Float = 0f,
     emptyBlockSize: Float = 0f,
@@ -50,7 +52,9 @@ fun FadingBlockRenderer(
             fullBarWidth = fullBarWidth,
             filledBlockSize = filledBlockSize,
             emptyBlockSize = emptyBlockSize,
-            canvasHeight = height.toFloat()
+            canvasHeight = height.toFloat(),
+            maxMagnitude = maxMagnitude,
+            heightScale = heightScale
         )
 
         bufferWrapper.bitmap?.let { bmp ->
@@ -77,10 +81,11 @@ internal class FadingPulseBuffer {
     private var lastW = 0
     private var lastH = 0
 
-    // Caching state untuk optimasi 60fps
     private var lastColorArgb = 0
     private var lastFilled = -1f
     private var lastEmpty = -1f
+
+    private var magnitudes = FloatArray(0)
 
     fun checkAndResize(width: Int, height: Int) {
         if (width != lastW || height != lastH) {
@@ -93,20 +98,31 @@ internal class FadingPulseBuffer {
     }
 
     fun updateFadeAndDrawLines(
-        fft: FloatArray,
+        fft: ByteArray,
         barColor: Color,
         barCount: Int,
         barWidth: Float,
         fullBarWidth: Float,
         filledBlockSize: Float,
         emptyBlockSize: Float,
-        canvasHeight: Float
+        canvasHeight: Float,
+        maxMagnitude: Float,
+        heightScale: Float
     ) {
         val canvas = nativeCanvas ?: return
-        val count = minOf(fft.size, barCount)
+        if (magnitudes.size != barCount) {
+            magnitudes = FloatArray(barCount)
+        }
+        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, magnitudes)
+        val heights = magnitudes
+        val count = minOf(heights.size, barCount)
         if (count <= 0) return
 
-        // 1. Optimasi properti Paint (hanya set ulang jika nilainya berubah)
+        for (i in 0 until heights.size) {
+            val normalized = heights[i] / maxMagnitude
+            heights[i] = (normalized * canvasHeight * heightScale).coerceIn(2f, canvasHeight)
+        }
+
         val colorArgb = barColor.toArgb()
         if (colorArgb != lastColorArgb) {
             linePaint.color = colorArgb
@@ -121,24 +137,21 @@ internal class FadingPulseBuffer {
 
         linePaint.strokeWidth = barWidth
 
-        // 2. Alokasi ulang array HANYA jika ukuran berubah
         val needed = count * 4
         if (fftPoints.size != needed) {
             fftPoints = FloatArray(needed)
         }
 
-        // 3. Kalkulasi titik garis
         var x = barWidth * 0.5f
         var pi = 0
         for (i in 0 until count) {
             fftPoints[pi++] = x
             fftPoints[pi++] = canvasHeight
             fftPoints[pi++] = x
-            fftPoints[pi++] = canvasHeight - fft[i]
+            fftPoints[pi++] = canvasHeight - heights[i]
             x += fullBarWidth
         }
 
-        // 4. Draw ke off-screen
         canvas.drawLines(fftPoints, 0, needed, linePaint)
         canvas.drawPaint(fadePaint)
     }

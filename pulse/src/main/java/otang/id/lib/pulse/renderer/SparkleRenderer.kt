@@ -15,16 +15,18 @@ import kotlin.random.Random
 
 @Composable
 fun SparkleRenderer(
-    fft: FloatArray,
+    fft: ByteArray,
     barColor: Color? = null,
     barCount: Int = 32,
+    maxMagnitude: Float = 128f,
+    heightScale: Float = 1f,
     modifier: Modifier
 ) {
     val color = barColor ?: MaterialTheme.colorScheme.primary
     val state = remember(barCount) { SparklePulseState(barCount) }
 
     Canvas(modifier = modifier.fillMaxSize()) {
-        state.update(fft, size.width, size.height)
+        state.update(fft, size.width, size.height, maxMagnitude, heightScale)
 
         drawIntoCanvas { canvas ->
             state.draw(canvas.nativeCanvas, color)
@@ -42,31 +44,34 @@ internal class SparklePulseState(private val barCount: Int) {
     private var currentHeights = FloatArray(0)
 
     private class Sparkle {
-        var x = 0f;
-        var y = 0f;
-        var vx = 0f;
+        var x = 0f
+        var y = 0f
+        var vx = 0f
         var vy = 0f
-        var size = 0f;
-        var life = 0f;
+        var size = 0f
+        var life = 0f
         var alive = false
     }
 
-    fun update(heights: FloatArray, width: Float, height: Float) {
+    fun update(fft: ByteArray, width: Float, height: Float, maxMagnitude: Float, heightScale: Float) {
         val spacing = if (barCount > 0) width / barCount else 0f
 
-        // Sinkronisasi data tinggi bar
-        if (currentHeights.size != heights.size) currentHeights = heights.copyOf()
-        else System.arraycopy(heights, 0, currentHeights, 0, heights.size)
+        if (currentHeights.size != barCount) currentHeights = FloatArray(barCount)
+        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, currentHeights)
 
-        // Update partikel
+        for (i in 0 until currentHeights.size) {
+            val normalized = currentHeights[i] / maxMagnitude
+            currentHeights[i] = (normalized * height * heightScale).coerceIn(2f, height)
+        }
+
         for (p in sparkles) {
             if (p.alive) {
                 p.life -= 0.02f
                 if (p.life <= 0f) p.alive = false
                 p.x += p.vx
                 p.y += p.vy
-            } else if (Random.nextFloat() < 0.05f) { // Probabilitas spawn
-                val idx = Random.nextInt(minOf(heights.size, barCount))
+            } else if (Random.nextFloat() < 0.05f) {
+                val idx = Random.nextInt(barCount)
                 p.alive = true
                 p.x = (idx * spacing) + (spacing / 2)
                 p.y = height - (currentHeights.getOrElse(idx) { 2f })

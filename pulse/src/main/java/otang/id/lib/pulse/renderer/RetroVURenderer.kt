@@ -11,13 +11,14 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.toArgb
-import kotlin.math.min
 
 @Composable
 fun RetroVURenderer(
-    fft: FloatArray,
+    fft: ByteArray,
     barColor: Color? = null,
     barCount: Int = 32,
+    maxMagnitude: Float = 128f,
+    heightScale: Float = 1f,
     segmentCount: Int = 16,
     modifier: Modifier
 ) {
@@ -25,7 +26,7 @@ fun RetroVURenderer(
     val state = remember(barCount, segmentCount) { RetroVUState(barCount, segmentCount) }
 
     Canvas(modifier = modifier.fillMaxSize()) {
-        state.updateData(fft)
+        state.updateData(fft, size.height, maxMagnitude, heightScale)
         state.draw(this, size.width, size.height, color)
     }
 }
@@ -36,21 +37,23 @@ internal class RetroVUState(
 ) {
     private var currentHeights = FloatArray(0)
     private var targetHeights = FloatArray(0)
-
-    // Cache posisi segmen untuk menghindari alokasi saat drawing
     private var segmentRects: Array<Array<Pair<Offset, Size>>> = emptyArray()
-
     private var lastW = 0f
     private var lastH = 0f
     private val smoothing = 0.15f
     private val backgroundColor = Color(40, 100, 100, 100).toArgb()
 
-    fun updateData(heights: FloatArray) {
+    fun updateData(fft: ByteArray, viewHeight: Float, maxMagnitude: Float, heightScale: Float) {
         if (targetHeights.size != barCount) {
             targetHeights = FloatArray(barCount)
             currentHeights = FloatArray(barCount) { 2f }
         }
-        System.arraycopy(heights, 0, targetHeights, 0, min(heights.size, barCount))
+        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, targetHeights)
+
+        for (i in 0 until targetHeights.size) {
+            val normalized = targetHeights[i] / maxMagnitude
+            targetHeights[i] = (normalized * viewHeight * heightScale).coerceIn(2f, viewHeight)
+        }
     }
 
     private fun updateLayout(width: Float, height: Float) {

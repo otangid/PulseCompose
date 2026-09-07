@@ -15,13 +15,14 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 
 @Composable
 fun MinimalRenderer(
-    fft: FloatArray,
+    fft: ByteArray,
     barColor: Color? = null,
     barCount: Int = 32,
+    maxMagnitude: Float = 128f,
+    heightScale: Float = 1f,
     modifier: Modifier
 ) {
     val color = barColor ?: MaterialTheme.colorScheme.primary
-    // Menyimpan state array dan path agar tidak teralokasi ulang setiap frame
     val rendererState = remember { MinimalPulseState() }
 
     Canvas(modifier = modifier.fillMaxSize()) {
@@ -30,7 +31,7 @@ fun MinimalRenderer(
 
         if (width <= 0f || height <= 0f || barCount <= 0) return@Canvas
 
-        rendererState.updateData(fft, barCount)
+        rendererState.updateData(fft, barCount, height, maxMagnitude, heightScale)
         rendererState.draw(this, width, height, color)
     }
 }
@@ -44,16 +45,19 @@ internal class MinimalPulseState {
     private val smoothing = 0.3f
     private val path = Path()
 
-    fun updateData(heights: FloatArray, barCount: Int) {
-        val count = minOf(heights.size, barCount)
-
-        if (targetHeights.size != count) {
-            targetHeights = FloatArray(count)
-            currentHeights = FloatArray(count) { 2f }
-            pointsX = FloatArray(count)
-            pointsY = FloatArray(count)
+    fun updateData(fft: ByteArray, barCount: Int, viewHeight: Float, maxMagnitude: Float, heightScale: Float) {
+        if (targetHeights.size != barCount) {
+            targetHeights = FloatArray(barCount)
+            currentHeights = FloatArray(barCount) { 2f }
+            pointsX = FloatArray(barCount)
+            pointsY = FloatArray(barCount)
         }
-        System.arraycopy(heights, 0, targetHeights, 0, count)
+        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, targetHeights)
+
+        for (i in 0 until targetHeights.size) {
+            val normalized = targetHeights[i] / maxMagnitude
+            targetHeights[i] = (normalized * viewHeight * heightScale).coerceIn(2f, viewHeight)
+        }
     }
 
     fun draw(drawScope: DrawScope, width: Float, height: Float, baseColor: Color) {
@@ -63,7 +67,6 @@ internal class MinimalPulseState {
         val spacing = if (count > 1) width / (count - 1) else width
         path.reset()
 
-        // 1. Kalkulasi titik dan proses smoothing
         for (i in 0 until count) {
             val target = targetHeights[i]
             val current = currentHeights[i]
@@ -78,7 +81,6 @@ internal class MinimalPulseState {
             pointsY[i] = height - h
         }
 
-        // 2. Kalkulasi Quadratic Bezier Curve agar garis mulus/melengkung
         if (count >= 2) {
             path.moveTo(pointsX[0], pointsY[0])
 
@@ -91,19 +93,18 @@ internal class MinimalPulseState {
                 val cx = (x1 + x2) / 2f
                 val cy = (y1 + y2) / 2f
 
-                path.quadraticBezierTo(x1, y1, cx, cy)
+                path.quadraticTo(x1, y1, cx, cy)
             }
 
             path.lineTo(pointsX[count - 1], pointsY[count - 1])
 
-            // Sesuai native: menggunakan subtle alpha (sekitar 70% opacity atau alpha 180)
             val strokeColor = baseColor.copy(alpha = 0.7f)
 
             drawScope.drawPath(
                 path = path,
                 color = strokeColor,
                 style = Stroke(
-                    width = 2.5f * drawScope.density, // Mengikuti skala DP layar
+                    width = 2.5f * drawScope.density,
                     cap = StrokeCap.Round,
                     join = StrokeJoin.Round
                 )
