@@ -1,6 +1,7 @@
 package otang.id.lib.pulse.renderer
 
 import android.graphics.BlurMaskFilter
+import android.graphics.RectF
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
@@ -126,10 +127,10 @@ internal class MatrixPulseState {
             targetHeights = FloatArray(lastBarCount)
             currentHeights = FloatArray(lastBarCount) { 2f }
         }
-        
+
         var magnitudes = FloatArray(fft.size / 2)
         FftUtils.calculateMagnitudes(fft, magnitudes)
-        
+
         if (config.useMovingAverage) {
             magnitudes = smoother.smooth(magnitudes, config.movingAverageWindowSize)
         }
@@ -212,11 +213,11 @@ internal class MatrixPulseState {
             val currentGlowAlpha = (glowAlpha * heightRatio).toInt().coerceIn(0, 255)
 
             glowPaint.color = (currentGlowAlpha shl 24) or (brightGreen and 0x00FFFFFF)
-            
+
             val glowRect = when (gravity) {
-                PulseGravity.Bottom -> android.graphics.RectF(x - glowWidth / 2f, viewHeight - height, x + glowWidth / 2f, viewHeight)
-                PulseGravity.Top -> android.graphics.RectF(x - glowWidth / 2f, 0f, x + glowWidth / 2f, height)
-                PulseGravity.Center -> android.graphics.RectF(x - glowWidth / 2f, center - height / 2f, x + glowWidth / 2f, center + height / 2f)
+                PulseGravity.Bottom -> RectF(x - glowWidth / 2f, viewHeight - height, x + glowWidth / 2f, viewHeight)
+                PulseGravity.Top -> RectF(x - glowWidth / 2f, 0f, x + glowWidth / 2f, height)
+                PulseGravity.Center -> RectF(x - glowWidth / 2f, center - height / 2f, x + glowWidth / 2f, center + height / 2f)
             }
             canvas.drawRect(glowRect, glowPaint)
 
@@ -226,7 +227,7 @@ internal class MatrixPulseState {
                     PulseGravity.Top -> (j * charSpacingWithGap) + charSize * 0.75f
                     PulseGravity.Center -> center - (height / 2f) + (j * charSpacingWithGap) + charSize * 0.75f
                 }
-                
+
                 val char = column.chars[j % column.chars.size]
                 val fadeRatio = j.toFloat() / numChars.coerceAtLeast(1)
 

@@ -14,6 +14,7 @@ import otang.id.lib.pulse.FftSmoother
 import otang.id.lib.pulse.FftUtils
 import otang.id.lib.pulse.PulseConfig
 import otang.id.lib.pulse.PulseGravity
+import kotlin.math.abs
 
 @Composable
 fun RetroVURenderer(
@@ -22,8 +23,8 @@ fun RetroVURenderer(
     modifier: Modifier
 ) {
     val color = config.barColor ?: MaterialTheme.colorScheme.primary
-    val state = remember(config.barCount, config.retroVUConfig.segmentCount) { 
-        RetroVUState(config.barCount, config.retroVUConfig.segmentCount) 
+    val state = remember(config.barCount, config.retroVUConfig.segmentCount) {
+        RetroVUState(config.barCount, config.retroVUConfig.segmentCount)
     }
 
     Canvas(modifier = modifier.fillMaxSize()) {
@@ -57,10 +58,10 @@ internal class RetroVUState(
             targetHeights = FloatArray(barCount)
             currentHeights = FloatArray(barCount) { 2f }
         }
-        
+
         var magnitudes = FloatArray(fft.size / 2)
         FftUtils.calculateMagnitudes(fft, magnitudes)
-        
+
         if (config.useMovingAverage) {
             magnitudes = smoother.smooth(magnitudes, config.movingAverageWindowSize)
         }
@@ -140,7 +141,7 @@ internal class RetroVUState(
 
                     for (s in 0 until segmentCount) {
                         val segY = midY + (s - midSeg) * segHeight
-                        val drawColor = if (kotlin.math.abs(s - midSeg) <= halfLit) barColor else Color.Transparent
+                        val drawColor = if (abs(s - midSeg) <= halfLit) barColor else Color.Transparent
                         drawScope.drawRect(
                             color = drawColor,
                             topLeft = Offset(x + segmentGapPx / 2f, segY + segmentGapPx / 2f),

@@ -87,7 +87,7 @@ internal class ParticlePulseState {
             magnitudes = FloatArray(fft.size / 2)
         }
         FftUtils.calculateMagnitudes(fft, magnitudes)
-        
+
         var heights = magnitudes
         if (config.useMovingAverage) {
             heights = smoother.smooth(heights, config.movingAverageWindowSize)
@@ -106,7 +106,7 @@ internal class ParticlePulseState {
         }
 
         if (audioIntensity > audioGate) {
-            spawnBurst(width, height, config.gravity, config.mirror)
+            spawnBurst(width, height, config.gravity)
         }
 
         for (p in particles) {
@@ -120,7 +120,7 @@ internal class ParticlePulseState {
         }
     }
 
-    private fun spawnBurst(width: Float, height: Float, gravity: PulseGravity, mirror: Boolean) {
+    private fun spawnBurst(width: Float, height: Float, gravity: PulseGravity) {
         var burstCount = (audioIntensity * 15).toInt().coerceAtMost(20)
         for (p in particles) {
             if (p.life <= 0f && burstCount > 0) {
@@ -134,22 +134,24 @@ internal class ParticlePulseState {
                         p.y = height
                         p.vy = -Random.nextFloat() * 10f - 2f
                     }
+
                     PulseGravity.Top -> {
                         p.y = 0f
                         p.vy = Random.nextFloat() * 10f + 2f
                     }
+
                     PulseGravity.Center -> {
                         p.y = height / 2f
                         p.vy = (Random.nextFloat() - 0.5f) * 12f
                     }
                 }
 
-                if (mirror && burstCount > 1) {
-                    // Try to spawn a mirrored particle if possible
-                    // This is complex because we need to find another dead particle.
-                    // Let's just keep it simple for now, the intensity-based bursts
-                    // already feel "fuller" when mirrored.
-                }
+//                if (mirror && burstCount > 1) {
+//                    // Try to spawn a mirrored particle if possible
+//                    // This is complex because we need to find another dead particle.
+//                    // Let's just keep it simple for now, the intensity-based bursts
+//                    // already feel "fuller" when mirrored.
+//                }
 
                 burstCount--
             }

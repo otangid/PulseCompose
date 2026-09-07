@@ -11,7 +11,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
-import otang.id.lib.pulse.FftSmoother
 import otang.id.lib.pulse.FftUtils
 import otang.id.lib.pulse.PulseConfig
 import otang.id.lib.pulse.PulseGravity
@@ -106,10 +105,10 @@ internal class NeonPulseState {
             targetHeights = FloatArray(lastBarCount)
             currentHeights = FloatArray(lastBarCount) { 2f }
         }
-        
+
         var magnitudes = FloatArray(fft.size / 2)
         FftUtils.calculateMagnitudes(fft, magnitudes)
-        
+
         if (config.useMovingAverage) {
             magnitudes = smoother.smooth(magnitudes, config.movingAverageWindowSize)
         }

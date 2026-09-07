@@ -60,7 +60,6 @@ internal class SolidLinePulseState {
     private var barCount = 0
     private var gap = 0f
     private var isRounded = false
-    
     private val smoother = FftSmoother()
 
     fun updateConfig(count: Int, barGap: Float, rounded: Boolean) {
@@ -74,10 +73,10 @@ internal class SolidLinePulseState {
             targetHeights = FloatArray(barCount)
             currentHeights = FloatArray(barCount) { 2f }
         }
-        
+
         var magnitudes = FloatArray(fft.size / 2)
         FftUtils.calculateMagnitudes(fft, magnitudes)
-        
+
         if (config.useMovingAverage) {
             magnitudes = smoother.smooth(magnitudes, config.movingAverageWindowSize)
         }

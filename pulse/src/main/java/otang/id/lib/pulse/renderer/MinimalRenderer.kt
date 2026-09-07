@@ -61,10 +61,10 @@ internal class MinimalPulseState {
             pointsX = FloatArray(barCount)
             pointsY = FloatArray(barCount)
         }
-        
+
         var magnitudes = FloatArray(fft.size / 2)
         FftUtils.calculateMagnitudes(fft, magnitudes)
-        
+
         if (config.useMovingAverage) {
             magnitudes = smoother.smooth(magnitudes, config.movingAverageWindowSize)
         }

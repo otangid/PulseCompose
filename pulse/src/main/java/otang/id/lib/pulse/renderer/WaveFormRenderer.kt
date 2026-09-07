@@ -46,9 +46,7 @@ fun WaveFormRenderer(
 internal class WaveformPulseState(private val barCount: Int) {
     private var currentHeights = FloatArray(0)
     private var targetHeights = FloatArray(0)
-    
     private val smoother = FftSmoother()
-
     private val waveformPath = Path()
     private val fillPath = Path()
 
@@ -57,10 +55,10 @@ internal class WaveformPulseState(private val barCount: Int) {
             targetHeights = FloatArray(barCount)
             currentHeights = FloatArray(barCount) { 2f }
         }
-        
+
         var magnitudes = FloatArray(fft.size / 2)
         FftUtils.calculateMagnitudes(fft, magnitudes)
-        
+
         if (config.useMovingAverage) {
             magnitudes = smoother.smooth(magnitudes, config.movingAverageWindowSize)
         }
@@ -71,11 +69,11 @@ internal class WaveformPulseState(private val barCount: Int) {
                 val mag = if (i < magnitudes.size) magnitudes[i] else 0f
                 val normalized = mag / config.maxMagnitude
                 val h = (normalized * viewHeight * config.heightScale).coerceIn(2f, viewHeight)
-                
+
                 // Put bass in center: [Treble ... Bass] [Bass ... Treble]
                 val rightIdx = halfCount + i
                 val leftIdx = halfCount - 1 - i
-                
+
                 if (rightIdx < barCount) targetHeights[rightIdx] = h
                 if (leftIdx >= 0) targetHeights[leftIdx] = h
             }
@@ -130,10 +128,12 @@ internal class WaveformPulseState(private val barCount: Int) {
                         fillPath.moveTo(x, height)
                         fillPath.lineTo(x, y)
                     }
+
                     PulseGravity.Top -> {
                         fillPath.moveTo(x, 0f)
                         fillPath.lineTo(x, y)
                     }
+
                     PulseGravity.Center -> {
                         fillPath.moveTo(x, center + h / 2f)
                         fillPath.lineTo(x, y)
@@ -151,11 +151,11 @@ internal class WaveformPulseState(private val barCount: Int) {
 
                 waveformPath.cubicTo(midX, prevY, midX, y, x, y)
                 fillPath.cubicTo(midX, prevY, midX, y, x, y)
-                
-                if (gravity == PulseGravity.Center) {
-                    // For Center, we also need to draw the bottom half of the fill
-                    // This is tricky with a single cubicTo.
-                }
+
+//                if (gravity == PulseGravity.Center) {
+//                    // For Center, we also need to draw the bottom half of the fill
+//                    // This is tricky with a single cubicTo.
+//                }
             }
         }
 
@@ -168,7 +168,7 @@ internal class WaveformPulseState(private val barCount: Int) {
                     val x = i * spacing
                     val h = currentHeights[i]
                     val y = center + h / 2f
-                    
+
                     if (i == count - 1) {
                         fillPath.lineTo(x, y)
                     } else {
@@ -200,7 +200,7 @@ internal class WaveformPulseState(private val barCount: Int) {
                     cap = StrokeCap.Round
                 )
             )
-            
+
             if (gravity == PulseGravity.Center) {
                 // Draw bottom outline for center gravity
                 val bottomOutline = Path()

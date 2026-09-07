@@ -9,7 +9,7 @@ internal class FftSmoother {
 
     fun smooth(magnitudes: FloatArray, windowSize: Int): FloatArray {
         if (windowSize <= 1) return magnitudes
-        
+
         val barCount = magnitudes.size
         if (windows.size != barCount || currentWindowSize != windowSize) {
             windows = Array(barCount) { ArrayDeque<Float>(windowSize) }
@@ -23,14 +23,14 @@ internal class FftSmoother {
             if (window.size >= windowSize) {
                 sums[i] -= window.pollFirst() ?: 0f
             }
-            
+
             val newValue = magnitudes[i]
             window.offerLast(newValue)
             sums[i] += newValue
-            
+
             result[i] = sums[i] / window.size
         }
-        
+
         return result
     }
 }

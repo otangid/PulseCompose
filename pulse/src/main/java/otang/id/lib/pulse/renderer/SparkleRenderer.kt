@@ -82,10 +82,10 @@ internal class SparklePulseState(private val barCount: Int) {
         val spacing = if (barCount > 0) width / barCount else 0f
 
         if (currentHeights.size != barCount) currentHeights = FloatArray(barCount)
-        
+
         var magnitudes = FloatArray(fft.size / 2)
         FftUtils.calculateMagnitudes(fft, magnitudes)
-        
+
         if (config.useMovingAverage) {
             magnitudes = smoother.smooth(magnitudes, config.movingAverageWindowSize)
         }
@@ -96,10 +96,10 @@ internal class SparklePulseState(private val barCount: Int) {
                 val mag = if (i < magnitudes.size) magnitudes[i] else 0f
                 val normalized = mag / maxMagnitude
                 val h = (normalized * height * heightScale).coerceIn(2f, height)
-                
+
                 val rightIdx = halfCount + i
                 val leftIdx = halfCount - 1 - i
-                
+
                 if (rightIdx < barCount) currentHeights[rightIdx] = h
                 if (leftIdx >= 0) currentHeights[leftIdx] = h
             }

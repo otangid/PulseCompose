@@ -106,10 +106,10 @@ internal class FadingPulseBuffer {
         if (magnitudes.size != barCount) {
             magnitudes = FloatArray(barCount)
         }
-        
+
         var heights = FloatArray(fft.size / 2)
         FftUtils.calculateMagnitudes(fft, heights)
-        
+
         if (config.useMovingAverage) {
             heights = smoother.smooth(heights, config.movingAverageWindowSize)
         }
@@ -136,7 +136,7 @@ internal class FadingPulseBuffer {
                 heights[i] = (normalized * canvasHeight * heightScale).coerceIn(2f, canvasHeight)
             }
         }
-        
+
         val finalHeights = if (config.mirror) magnitudes else heights
 
         val colorArgb = barColor.toArgb()
