@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.toArgb
 import otang.id.lib.pulse.FftSmoother
 import otang.id.lib.pulse.FftUtils
 import otang.id.lib.pulse.PulseConfig
+import otang.id.lib.pulse.PulseGravity
 import kotlin.math.max
 
 @Composable
@@ -43,7 +44,8 @@ fun SolidLineRenderer(
                 height = height,
                 color = color,
                 smoothing = config.smoothing,
-                cornerRadius = config.solidLineConfig.cornerRadius
+                cornerRadius = config.solidLineConfig.cornerRadius,
+                gravity = config.gravity
             )
         }
     }
@@ -87,7 +89,15 @@ internal class SolidLinePulseState {
         }
     }
 
-    fun draw(canvas: Canvas, width: Float, height: Float, color: Color, smoothing: Float, cornerRadius: Float) {
+    fun draw(
+        canvas: Canvas,
+        width: Float,
+        height: Float,
+        color: Color,
+        smoothing: Float,
+        cornerRadius: Float,
+        gravity: PulseGravity
+    ) {
         paint.color = color.toArgb()
 
         val totalGap = (barCount - 1) * gap
@@ -105,16 +115,24 @@ internal class SolidLinePulseState {
             currentHeights[i] = h
 
             val left = i * fullBarWidth
-            val top = height - h
+            val (top, bottom) = when (gravity) {
+                PulseGravity.Bottom -> (height - h) to height
+                PulseGravity.Top -> 0f to h
+                PulseGravity.Center -> (height / 2f - h / 2f) to (height / 2f + h / 2f)
+            }
 
             if (isRounded) {
-                val rect = RectF(left, top, left + barWidth, height)
-                val radii = floatArrayOf(cornerRadius, cornerRadius, cornerRadius, cornerRadius, 0f, 0f, 0f, 0f)
+                val rect = RectF(left, top, left + barWidth, bottom)
+                val radii = when (gravity) {
+                    PulseGravity.Bottom -> floatArrayOf(cornerRadius, cornerRadius, cornerRadius, cornerRadius, 0f, 0f, 0f, 0f)
+                    PulseGravity.Top -> floatArrayOf(0f, 0f, 0f, 0f, cornerRadius, cornerRadius, cornerRadius, cornerRadius)
+                    PulseGravity.Center -> floatArrayOf(cornerRadius, cornerRadius, cornerRadius, cornerRadius, cornerRadius, cornerRadius, cornerRadius, cornerRadius)
+                }
                 val p = Path()
                 p.addRoundRect(rect, radii, Path.Direction.CW)
                 canvas.drawPath(p, paint)
             } else {
-                canvas.drawRect(left, top, left + barWidth, height, paint)
+                canvas.drawRect(left, top, left + barWidth, bottom, paint)
             }
         }
     }

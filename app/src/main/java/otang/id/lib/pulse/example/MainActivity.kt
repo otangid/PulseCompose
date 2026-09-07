@@ -42,6 +42,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import otang.id.lib.pulse.PulseConfig
+import otang.id.lib.pulse.PulseGravity
 import otang.id.lib.pulse.PulseRenderer
 import otang.id.lib.pulse.PulseView
 import otang.id.lib.pulse.example.ui.theme.PulseComposeTheme
@@ -101,6 +102,10 @@ fun PulseTest() {
     var rendererIndex by remember { mutableFloatStateOf(renderers.indexOf(PulseRenderer.WaveForm).toFloat()) }
     val currentRenderer = renderers[rendererIndex.toInt().coerceIn(0, renderers.size - 1)]
 
+    val gravities = PulseGravity.entries
+    var gravityIndex by remember { mutableFloatStateOf(gravities.indexOf(PulseGravity.Bottom).toFloat()) }
+    val currentGravity = gravities[gravityIndex.toInt().coerceIn(0, gravities.size - 1)]
+
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Column(
             modifier = Modifier
@@ -120,6 +125,7 @@ fun PulseTest() {
                             .aspectRatio(1f),
                         config = PulseConfig(
                             renderer = currentRenderer,
+                            gravity = currentGravity,
                             useMovingAverage = useMovingAverage
                         ),
                         isPlaying = isPlaying
@@ -157,6 +163,20 @@ fun PulseTest() {
                     onValueChange = { rendererIndex = it },
                     valueRange = 0f..(renderers.size - 1).toFloat(),
                     steps = renderers.size - 2,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
+                Text(
+                    text = "Gravity: ${currentGravity.name}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+
+                Slider(
+                    value = gravityIndex,
+                    onValueChange = { gravityIndex = it },
+                    valueRange = 0f..(gravities.size - 1).toFloat(),
+                    steps = gravities.size - 2,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
 

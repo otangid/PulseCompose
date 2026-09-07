@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import otang.id.lib.pulse.FftSmoother
 import otang.id.lib.pulse.FftUtils
 import otang.id.lib.pulse.PulseConfig
+import otang.id.lib.pulse.PulseGravity
 
 @Composable
 fun RetroVURenderer(
@@ -33,7 +34,8 @@ fun RetroVURenderer(
             height = size.height,
             barColor = color,
             smoothing = config.smoothing,
-            segmentGapPx = config.retroVUConfig.segmentGapPx
+            segmentGapPx = config.retroVUConfig.segmentGapPx,
+            gravity = config.gravity
         )
     }
 }
@@ -88,7 +90,15 @@ internal class RetroVUState(
         }
     }
 
-    fun draw(drawScope: DrawScope, width: Float, height: Float, barColor: Color, smoothing: Float, segmentGapPx: Float) {
+    fun draw(
+        drawScope: DrawScope,
+        width: Float,
+        height: Float,
+        barColor: Color,
+        smoothing: Float,
+        segmentGapPx: Float,
+        gravity: PulseGravity
+    ) {
         updateLayout(width, height, segmentGapPx)
 
         for (i in 0 until barCount) {
@@ -104,14 +114,36 @@ internal class RetroVUState(
             val litSegments = (heightPercent * segmentCount).toInt()
 
             for (seg in 0 until segmentCount) {
-                val (offset, size) = segmentRects[i][seg]
+                if (gravity == PulseGravity.Center) {
+                    val barWidth = width / barCount
+                    val segHeight = height / segmentCount
+                    val x = i * barWidth
+                    val midY = height / 2f
 
-                val color = when {
-                    seg <= litSegments -> barColor
-                    else -> Color.Transparent
+                    val halfLit = litSegments / 2
+                    val midSeg = segmentCount / 2
+
+                    for (s in 0 until segmentCount) {
+                        val segY = midY + (s - midSeg) * segHeight
+                        val drawColor = if (kotlin.math.abs(s - midSeg) <= halfLit) barColor else Color.Transparent
+                        drawScope.drawRect(
+                            color = drawColor,
+                            topLeft = Offset(x + segmentGapPx / 2f, segY + segmentGapPx / 2f),
+                            size = Size(barWidth - segmentGapPx, segHeight - segmentGapPx)
+                        )
+                    }
+                    break
+                } else {
+                    val rectIdx = if (gravity == PulseGravity.Top) segmentCount - 1 - seg else seg
+
+                    val (offset, size) = segmentRects[i][rectIdx]
+                    val color = if (seg <= litSegments) barColor else Color.Transparent
+
+                    val drawOffset = if (gravity == PulseGravity.Top) {
+                        Offset(offset.x, height - offset.y - size.height)
+                    } else offset
+                    drawScope.drawRect(color = color, topLeft = drawOffset, size = size)
                 }
-
-                drawScope.drawRect(color = color, topLeft = offset, size = size)
             }
         }
     }

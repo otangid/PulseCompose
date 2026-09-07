@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import otang.id.lib.pulse.FftSmoother
 import otang.id.lib.pulse.FftUtils
 import otang.id.lib.pulse.PulseConfig
+import otang.id.lib.pulse.PulseGravity
 
 @Composable
 fun MinimalRenderer(
@@ -39,7 +40,8 @@ fun MinimalRenderer(
             baseColor = color,
             smoothing = config.smoothing,
             strokeWidthScale = config.minimalConfig.strokeWidthScale,
-            alpha = config.minimalConfig.alpha
+            alpha = config.minimalConfig.alpha,
+            gravity = config.gravity
         )
     }
 }
@@ -81,13 +83,16 @@ internal class MinimalPulseState {
         baseColor: Color,
         smoothing: Float,
         strokeWidthScale: Float,
-        alpha: Float
+        alpha: Float,
+        gravity: PulseGravity
     ) {
         val count = currentHeights.size
         if (count <= 0) return
 
         val spacing = if (count > 1) width / (count - 1) else width
         path.reset()
+
+        val center = height / 2f
 
         for (i in 0 until count) {
             val target = targetHeights[i]
@@ -100,7 +105,11 @@ internal class MinimalPulseState {
             currentHeights[i] = h
 
             pointsX[i] = i * spacing
-            pointsY[i] = height - h
+            pointsY[i] = when (gravity) {
+                PulseGravity.Bottom -> height - h
+                PulseGravity.Top -> h
+                PulseGravity.Center -> center - h / 2f
+            }
         }
 
         if (count >= 2) {
@@ -131,6 +140,31 @@ internal class MinimalPulseState {
                     join = StrokeJoin.Round
                 )
             )
+
+            if (gravity == PulseGravity.Center) {
+                // Draw symmetric bottom line
+                val bottomPath = Path()
+                bottomPath.moveTo(pointsX[0], center + (center - pointsY[0]))
+                for (i in 0 until count - 1) {
+                    val x1 = pointsX[i]
+                    val y1 = center + (center - pointsY[i])
+                    val x2 = pointsX[i + 1]
+                    val y2 = center + (center - pointsY[i + 1])
+                    val cx = (x1 + x2) / 2f
+                    val cy = (y1 + y2) / 2f
+                    bottomPath.quadraticTo(x1, y1, cx, cy)
+                }
+                bottomPath.lineTo(pointsX[count - 1], center + (center - pointsY[count - 1]))
+                drawScope.drawPath(
+                    path = bottomPath,
+                    color = strokeColor,
+                    style = Stroke(
+                        width = strokeWidthScale * drawScope.density,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round
+                    )
+                )
+            }
         }
     }
 }

@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.toArgb
 import otang.id.lib.pulse.FftSmoother
 import otang.id.lib.pulse.FftUtils
 import otang.id.lib.pulse.PulseConfig
+import otang.id.lib.pulse.PulseGravity
 import kotlin.math.max
 import android.graphics.Canvas as NativeCanvas
 import android.graphics.Paint as NativePaint
@@ -43,7 +44,8 @@ fun NeonRenderer(
                 barColor = color,
                 smoothing = config.smoothing,
                 glowAlpha = config.neonConfig.glowAlpha,
-                glowRadius = config.neonConfig.glowRadius
+                glowRadius = config.neonConfig.glowRadius,
+                gravity = config.gravity
             )
         }
     }
@@ -125,7 +127,8 @@ internal class NeonPulseState {
         barColor: Color,
         smoothing: Float,
         glowAlpha: Int,
-        glowRadius: Float
+        glowRadius: Float,
+        gravity: PulseGravity
     ) {
         val count = minOf(lastBarCount, currentHeights.size, pointsX.size)
         if (count <= 0) return
@@ -143,6 +146,8 @@ internal class NeonPulseState {
             glowPaint.maskFilter = BlurMaskFilter(glowRadius, BlurMaskFilter.Blur.NORMAL)
         }
 
+        val center = viewHeight / 2f
+
         for (i in 0 until count) {
             val target = targetHeights.getOrElse(i) { 2f }
             val current = currentHeights.getOrElse(i) { 2f }
@@ -154,10 +159,14 @@ internal class NeonPulseState {
             currentHeights[i] = h
 
             val x = pointsX[i]
-            val y0 = viewHeight - h
+            val (y1, y2) = when (gravity) {
+                PulseGravity.Bottom -> viewHeight to (viewHeight - h)
+                PulseGravity.Top -> 0f to h
+                PulseGravity.Center -> (center - h / 2f) to (center + h / 2f)
+            }
 
-            canvas.drawLine(x, viewHeight, x, y0, glowPaint)
-            canvas.drawLine(x, viewHeight, x, y0, corePaint)
+            canvas.drawLine(x, y1, x, y2, glowPaint)
+            canvas.drawLine(x, y1, x, y2, corePaint)
         }
     }
 }

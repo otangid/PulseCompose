@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.toArgb
 import otang.id.lib.pulse.FftSmoother
 import otang.id.lib.pulse.FftUtils
 import otang.id.lib.pulse.PulseConfig
+import otang.id.lib.pulse.PulseGravity
 import kotlin.random.Random
 
 @Composable
@@ -105,11 +106,32 @@ internal class SparklePulseState(private val barCount: Int) {
                 val idx = Random.nextInt(barCount)
                 p.alive = true
                 p.x = (idx * spacing) + (spacing / 2)
-                p.y = height - (currentHeights.getOrElse(idx) { 2f })
                 p.vx = (Random.nextFloat() - 0.5f) * 10f
-                p.vy = -Random.nextFloat() * 5f - 2f
                 p.size = Random.nextFloat() * 6f + 2f
                 p.life = 1f
+
+                val h = currentHeights.getOrElse(idx) { 2f }
+                when (config.gravity) {
+                    PulseGravity.Bottom -> {
+                        p.y = height - h
+                        p.vy = -Random.nextFloat() * 5f - 2f
+                    }
+
+                    PulseGravity.Top -> {
+                        p.y = h
+                        p.vy = Random.nextFloat() * 5f + 2f
+                    }
+
+                    PulseGravity.Center -> {
+                        if (Random.nextBoolean()) {
+                            p.y = height / 2f - h / 2f
+                            p.vy = -Random.nextFloat() * 5f - 2f
+                        } else {
+                            p.y = height / 2f + h / 2f
+                            p.vy = Random.nextFloat() * 5f + 2f
+                        }
+                    }
+                }
             }
         }
     }

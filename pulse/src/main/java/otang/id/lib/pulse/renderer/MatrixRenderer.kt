@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import otang.id.lib.pulse.FftSmoother
 import otang.id.lib.pulse.FftUtils
 import otang.id.lib.pulse.PulseConfig
+import otang.id.lib.pulse.PulseGravity
 import kotlin.math.max
 import kotlin.random.Random
 import android.graphics.Canvas as NativeCanvas
@@ -44,7 +45,8 @@ fun MatrixRenderer(
                 mediumGreen = config.matrixConfig.mediumGreen,
                 darkGreen = config.matrixConfig.darkGreen,
                 glowAlpha = config.matrixConfig.glowAlpha,
-                changeInterval = config.matrixConfig.changeInterval
+                changeInterval = config.matrixConfig.changeInterval,
+                gravity = config.gravity
             )
         }
     }
@@ -147,7 +149,8 @@ internal class MatrixPulseState {
         mediumGreen: Int,
         darkGreen: Int,
         glowAlpha: Int,
-        changeInterval: Int
+        changeInterval: Int,
+        gravity: PulseGravity
     ) {
         val count = minOf(lastBarCount, barColumns.size, currentHeights.size, targetHeights.size)
 
@@ -170,6 +173,7 @@ internal class MatrixPulseState {
         if (shouldChange) changeCounter = 0
 
         val fullBarWidth = columnWidth + lastGapPx
+        val center = viewHeight / 2f
 
         for (i in 0 until count) {
             val column = barColumns[i]
@@ -193,18 +197,22 @@ internal class MatrixPulseState {
             val currentGlowAlpha = (glowAlpha * heightRatio).toInt().coerceIn(0, 255)
 
             glowPaint.color = (currentGlowAlpha shl 24) or (brightGreen and 0x00FFFFFF)
-            canvas.drawRect(
-                x - glowWidth / 2f,
-                viewHeight - height,
-                x + glowWidth / 2f,
-                viewHeight,
-                glowPaint
-            )
+            
+            val glowRect = when (gravity) {
+                PulseGravity.Bottom -> android.graphics.RectF(x - glowWidth / 2f, viewHeight - height, x + glowWidth / 2f, viewHeight)
+                PulseGravity.Top -> android.graphics.RectF(x - glowWidth / 2f, 0f, x + glowWidth / 2f, height)
+                PulseGravity.Center -> android.graphics.RectF(x - glowWidth / 2f, center - height / 2f, x + glowWidth / 2f, center + height / 2f)
+            }
+            canvas.drawRect(glowRect, glowPaint)
 
             for (j in 0 until numChars) {
-                val y = viewHeight - (j * charSpacingWithGap) - charSize * 0.25f
+                val y = when (gravity) {
+                    PulseGravity.Bottom -> viewHeight - (j * charSpacingWithGap) - charSize * 0.25f
+                    PulseGravity.Top -> (j * charSpacingWithGap) + charSize * 0.75f
+                    PulseGravity.Center -> center - (height / 2f) + (j * charSpacingWithGap) + charSize * 0.75f
+                }
+                
                 val char = column.chars[j % column.chars.size]
-
                 val fadeRatio = j.toFloat() / numChars.coerceAtLeast(1)
 
                 val textPaint = when {

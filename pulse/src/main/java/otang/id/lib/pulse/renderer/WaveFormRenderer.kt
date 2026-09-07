@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import otang.id.lib.pulse.FftSmoother
 import otang.id.lib.pulse.FftUtils
 import otang.id.lib.pulse.PulseConfig
+import otang.id.lib.pulse.PulseGravity
 
 @Composable
 fun WaveFormRenderer(
@@ -33,6 +34,7 @@ fun WaveFormRenderer(
             height = size.height,
             color = color,
             smoothing = config.smoothing,
+            gravity = config.gravity,
             showOutline = config.waveFormConfig.showOutline,
             showFill = config.waveFormConfig.showFill,
             fillAlpha = config.waveFormConfig.fillAlpha,
@@ -76,6 +78,7 @@ internal class WaveformPulseState(private val barCount: Int) {
         height: Float,
         color: Color,
         smoothing: Float,
+        gravity: PulseGravity,
         showOutline: Boolean,
         showFill: Boolean,
         fillAlpha: Float,
@@ -88,6 +91,8 @@ internal class WaveformPulseState(private val barCount: Int) {
         waveformPath.reset()
         fillPath.reset()
 
+        val center = height / 2f
+
         for (i in 0 until count) {
             val target = targetHeights[i]
             val current = currentHeights[i]
@@ -96,23 +101,70 @@ internal class WaveformPulseState(private val barCount: Int) {
             currentHeights[i] = h
 
             val x = i * spacing
-            val y = height - h
+            val y = when (gravity) {
+                PulseGravity.Bottom -> height - h
+                PulseGravity.Top -> h
+                PulseGravity.Center -> center - h / 2f
+            }
 
             if (i == 0) {
                 waveformPath.moveTo(x, y)
-                fillPath.moveTo(x, height)
-                fillPath.lineTo(x, y)
+                when (gravity) {
+                    PulseGravity.Bottom -> {
+                        fillPath.moveTo(x, height)
+                        fillPath.lineTo(x, y)
+                    }
+                    PulseGravity.Top -> {
+                        fillPath.moveTo(x, 0f)
+                        fillPath.lineTo(x, y)
+                    }
+                    PulseGravity.Center -> {
+                        fillPath.moveTo(x, center + h / 2f)
+                        fillPath.lineTo(x, y)
+                    }
+                }
             } else {
                 val prevX = (i - 1) * spacing
-                val prevY = height - currentHeights[i - 1]
+                val prevH = currentHeights[i - 1]
+                val prevY = when (gravity) {
+                    PulseGravity.Bottom -> height - prevH
+                    PulseGravity.Top -> prevH
+                    PulseGravity.Center -> center - prevH / 2f
+                }
                 val midX = (prevX + x) / 2f
 
                 waveformPath.cubicTo(midX, prevY, midX, y, x, y)
                 fillPath.cubicTo(midX, prevY, midX, y, x, y)
+                
+                if (gravity == PulseGravity.Center) {
+                    // For Center, we also need to draw the bottom half of the fill
+                    // This is tricky with a single cubicTo.
+                }
             }
         }
 
-        fillPath.lineTo(width, height)
+        when (gravity) {
+            PulseGravity.Bottom -> fillPath.lineTo(width, height)
+            PulseGravity.Top -> fillPath.lineTo(width, 0f)
+            PulseGravity.Center -> {
+                // Symmetric bottom path for center gravity
+                for (i in count - 1 downTo 0) {
+                    val x = i * spacing
+                    val h = currentHeights[i]
+                    val y = center + h / 2f
+                    
+                    if (i == count - 1) {
+                        fillPath.lineTo(x, y)
+                    } else {
+                        val nextX = (i + 1) * spacing
+                        val nextH = currentHeights[i + 1]
+                        val nextY = center + nextH / 2f
+                        val midX = (nextX + x) / 2f
+                        fillPath.cubicTo(midX, nextY, midX, y, x, y)
+                    }
+                }
+            }
+        }
         fillPath.close()
 
         if (showFill) {
@@ -132,6 +184,32 @@ internal class WaveformPulseState(private val barCount: Int) {
                     cap = StrokeCap.Round
                 )
             )
+            
+            if (gravity == PulseGravity.Center) {
+                // Draw bottom outline for center gravity
+                val bottomOutline = Path()
+                for (i in 0 until count) {
+                    val x = i * spacing
+                    val h = currentHeights[i]
+                    val y = center + h / 2f
+                    if (i == 0) bottomOutline.moveTo(x, y)
+                    else {
+                        val prevX = (i - 1) * spacing
+                        val prevH = currentHeights[i - 1]
+                        val prevY = center + prevH / 2f
+                        val midX = (prevX + x) / 2f
+                        bottomOutline.cubicTo(midX, prevY, midX, y, x, y)
+                    }
+                }
+                drawScope.drawPath(
+                    path = bottomOutline,
+                    color = color,
+                    style = Stroke(
+                        width = strokeWidthScale * drawScope.density,
+                        cap = StrokeCap.Round
+                    )
+                )
+            }
         }
     }
 }

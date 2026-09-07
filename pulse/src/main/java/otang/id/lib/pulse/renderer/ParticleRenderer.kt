@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.toArgb
 import otang.id.lib.pulse.FftSmoother
 import otang.id.lib.pulse.FftUtils
 import otang.id.lib.pulse.PulseConfig
+import otang.id.lib.pulse.PulseGravity
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
@@ -105,7 +106,7 @@ internal class ParticlePulseState {
         }
 
         if (audioIntensity > audioGate) {
-            spawnBurst(width, height)
+            spawnBurst(width, height, config.gravity)
         }
 
         for (p in particles) {
@@ -119,16 +120,29 @@ internal class ParticlePulseState {
         }
     }
 
-    private fun spawnBurst(width: Float, height: Float) {
+    private fun spawnBurst(width: Float, height: Float, gravity: PulseGravity) {
         var burstCount = (audioIntensity * 15).toInt().coerceAtMost(20)
         for (p in particles) {
             if (p.life <= 0f && burstCount > 0) {
                 p.x = Random.nextFloat() * width
-                p.y = height
-                p.vx = (Random.nextFloat() - 0.5f) * 6f
-                p.vy = -Random.nextFloat() * 10f - 2f
                 p.size = Random.nextFloat() * 10f + 2f
                 p.life = 1f
+                p.vx = (Random.nextFloat() - 0.5f) * 6f
+
+                when (gravity) {
+                    PulseGravity.Bottom -> {
+                        p.y = height
+                        p.vy = -Random.nextFloat() * 10f - 2f
+                    }
+                    PulseGravity.Top -> {
+                        p.y = 0f
+                        p.vy = Random.nextFloat() * 10f + 2f
+                    }
+                    PulseGravity.Center -> {
+                        p.y = height / 2f
+                        p.vy = (Random.nextFloat() - 0.5f) * 12f
+                    }
+                }
                 burstCount--
             }
         }

@@ -15,8 +15,15 @@ enum class PulseRenderer {
     WaveForm
 }
 
+enum class PulseGravity {
+    Top,
+    Bottom,
+    Center
+}
+
 data class PulseConfig(
     val renderer: PulseRenderer = PulseRenderer.WaveForm,
+    val gravity: PulseGravity = PulseGravity.Bottom,
     val barColor: Color? = null,
     val barCount: Int = 32,
     val maxMagnitude: Float = 128f,

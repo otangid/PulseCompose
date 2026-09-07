@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.toArgb
 import otang.id.lib.pulse.FftSmoother
 import otang.id.lib.pulse.FftUtils
 import otang.id.lib.pulse.PulseConfig
+import otang.id.lib.pulse.PulseGravity
 import android.graphics.Canvas as NativeCanvas
 import android.graphics.Paint as NativePaint
 
@@ -147,11 +148,18 @@ internal class FadingPulseBuffer {
 
         var x = barWidth * 0.5f
         var pi = 0
+        val center = canvasHeight / 2f
         for (i in 0 until count) {
+            val h = heights[i]
+            val (y1, y2) = when (config.gravity) {
+                PulseGravity.Bottom -> canvasHeight to (canvasHeight - h)
+                PulseGravity.Top -> 0f to h
+                PulseGravity.Center -> (center - h / 2f) to (center + h / 2f)
+            }
             fftPoints[pi++] = x
-            fftPoints[pi++] = canvasHeight
+            fftPoints[pi++] = y1
             fftPoints[pi++] = x
-            fftPoints[pi++] = canvasHeight - heights[i]
+            fftPoints[pi++] = y2
             x += fullBarWidth
         }
 
