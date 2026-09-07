@@ -90,10 +90,25 @@ internal class SparklePulseState(private val barCount: Int) {
             magnitudes = smoother.smooth(magnitudes, config.movingAverageWindowSize)
         }
 
-        for ((i, element) in magnitudes.withIndex()) {
-            if (i >= barCount) break
-            val normalized = element / maxMagnitude
-            currentHeights[i] = (normalized * height * heightScale).coerceIn(2f, height)
+        if (config.mirror) {
+            val halfCount = barCount / 2
+            for (i in 0 until halfCount) {
+                val mag = if (i < magnitudes.size) magnitudes[i] else 0f
+                val normalized = mag / maxMagnitude
+                val h = (normalized * height * heightScale).coerceIn(2f, height)
+                
+                val rightIdx = halfCount + i
+                val leftIdx = halfCount - 1 - i
+                
+                if (rightIdx < barCount) currentHeights[rightIdx] = h
+                if (leftIdx >= 0) currentHeights[leftIdx] = h
+            }
+        } else {
+            for ((i, element) in magnitudes.withIndex()) {
+                if (i >= barCount) break
+                val normalized = element / maxMagnitude
+                currentHeights[i] = (normalized * height * heightScale).coerceIn(2f, height)
+            }
         }
 
         for (p in sparkles) {

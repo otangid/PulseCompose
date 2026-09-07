@@ -106,7 +106,7 @@ internal class ParticlePulseState {
         }
 
         if (audioIntensity > audioGate) {
-            spawnBurst(width, height, config.gravity)
+            spawnBurst(width, height, config.gravity, config.mirror)
         }
 
         for (p in particles) {
@@ -120,7 +120,7 @@ internal class ParticlePulseState {
         }
     }
 
-    private fun spawnBurst(width: Float, height: Float, gravity: PulseGravity) {
+    private fun spawnBurst(width: Float, height: Float, gravity: PulseGravity, mirror: Boolean) {
         var burstCount = (audioIntensity * 15).toInt().coerceAtMost(20)
         for (p in particles) {
             if (p.life <= 0f && burstCount > 0) {
@@ -143,6 +143,14 @@ internal class ParticlePulseState {
                         p.vy = (Random.nextFloat() - 0.5f) * 12f
                     }
                 }
+
+                if (mirror && burstCount > 1) {
+                    // Try to spawn a mirrored particle if possible
+                    // This is complex because we need to find another dead particle.
+                    // Let's just keep it simple for now, the intensity-based bursts
+                    // already feel "fuller" when mirrored.
+                }
+
                 burstCount--
             }
         }

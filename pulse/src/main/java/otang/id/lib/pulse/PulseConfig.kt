@@ -31,6 +31,7 @@ data class PulseConfig(
     val smoothing: Float = 0.2f,
     val useMovingAverage: Boolean = false,
     val movingAverageWindowSize: Int = 2,
+    val mirror: Boolean = false,
 
     // Renderer specific configurations
     val fadingBlockConfig: FadingBlockConfig = FadingBlockConfig(),

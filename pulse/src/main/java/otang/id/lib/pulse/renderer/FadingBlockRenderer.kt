@@ -117,10 +117,27 @@ internal class FadingPulseBuffer {
         val count = minOf(heights.size, barCount)
         if (count <= 0) return
 
-        for (i in 0 until count) {
-            val normalized = heights[i] / maxMagnitude
-            heights[i] = (normalized * canvasHeight * heightScale).coerceIn(2f, canvasHeight)
+        if (config.mirror) {
+            val halfCount = barCount / 2
+            for (i in 0 until halfCount) {
+                val mag = if (i < heights.size) heights[i] else 0f
+                val normalized = mag / maxMagnitude
+                val h = (normalized * canvasHeight * heightScale).coerceIn(2f, canvasHeight)
+
+                val rightIdx = halfCount + i
+                val leftIdx = halfCount - 1 - i
+
+                if (rightIdx < barCount) magnitudes[rightIdx] = h
+                if (leftIdx >= 0) magnitudes[leftIdx] = h
+            }
+        } else {
+            for (i in 0 until count) {
+                val normalized = heights[i] / maxMagnitude
+                heights[i] = (normalized * canvasHeight * heightScale).coerceIn(2f, canvasHeight)
+            }
         }
+        
+        val finalHeights = if (config.mirror) magnitudes else heights
 
         val colorArgb = barColor.toArgb()
         if (colorArgb != lastColorArgb) {
@@ -150,7 +167,7 @@ internal class FadingPulseBuffer {
         var pi = 0
         val center = canvasHeight / 2f
         for (i in 0 until count) {
-            val h = heights[i]
+            val h = finalHeights[i]
             val (y1, y2) = when (config.gravity) {
                 PulseGravity.Bottom -> canvasHeight to (canvasHeight - h)
                 PulseGravity.Top -> 0f to h

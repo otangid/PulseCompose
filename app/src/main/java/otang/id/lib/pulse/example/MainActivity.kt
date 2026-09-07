@@ -76,6 +76,7 @@ fun PulseTest() {
     var isPlaying by remember { mutableStateOf(false) }
     var audioSessionId by remember { mutableIntStateOf(0) }
     var useMovingAverage by remember { mutableStateOf(false) }
+    var useMirror by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -126,7 +127,8 @@ fun PulseTest() {
                         config = PulseConfig(
                             renderer = currentRenderer,
                             gravity = currentGravity,
-                            useMovingAverage = useMovingAverage
+                            useMovingAverage = useMovingAverage,
+                            mirror = useMirror
                         ),
                         isPlaying = isPlaying
                     )
@@ -189,6 +191,13 @@ fun PulseTest() {
                     Switch(
                         checked = useMovingAverage,
                         onCheckedChange = { useMovingAverage = it }
+                    )
+                    Spacer(modifier = Modifier.padding(8.dp))
+                    Text("Mirror (Bass center)", fontSize = 14.sp)
+                    Spacer(modifier = Modifier.padding(4.dp))
+                    Switch(
+                        checked = useMirror,
+                        onCheckedChange = { useMirror = it }
                     )
                 }
 

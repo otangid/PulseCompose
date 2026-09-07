@@ -65,10 +65,25 @@ internal class RetroVUState(
             magnitudes = smoother.smooth(magnitudes, config.movingAverageWindowSize)
         }
 
-        for ((i, element) in magnitudes.withIndex()) {
-            if (i >= barCount) break
-            val normalized = element / config.maxMagnitude
-            targetHeights[i] = (normalized * viewHeight * config.heightScale).coerceIn(2f, viewHeight)
+        if (config.mirror) {
+            val halfCount = barCount / 2
+            for (i in 0 until halfCount) {
+                val mag = if (i < magnitudes.size) magnitudes[i] else 0f
+                val normalized = mag / config.maxMagnitude
+                val h = (normalized * viewHeight * config.heightScale).coerceIn(2f, viewHeight)
+
+                val rightIdx = halfCount + i
+                val leftIdx = halfCount - 1 - i
+
+                if (rightIdx < barCount) targetHeights[rightIdx] = h
+                if (leftIdx >= 0) targetHeights[leftIdx] = h
+            }
+        } else {
+            for ((i, element) in magnitudes.withIndex()) {
+                if (i >= barCount) break
+                val normalized = element / config.maxMagnitude
+                targetHeights[i] = (normalized * viewHeight * config.heightScale).coerceIn(2f, viewHeight)
+            }
         }
     }
 
