@@ -25,7 +25,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import otang.id.lib.pulse.MinimalConfig
 import otang.id.lib.pulse.example.ui.components.SliderTrack
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

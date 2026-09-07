@@ -11,6 +11,7 @@ composeBom = "2026.08.00"
 material3 = "1.5.0-alpha27"
 materialIconsExtended = "1.7.8"
 media3 = "1.11.0"
+publish = "0.37.0"
 
 [libraries]
 androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
@@ -34,4 +35,5 @@ androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.re
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 android-library = { id = "com.android.library", version.ref = "agp" }
+publish = { id = "com.vanniktech.maven.publish", version.ref = "publish" }
 
