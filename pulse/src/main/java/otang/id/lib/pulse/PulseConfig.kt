@@ -29,7 +29,7 @@ data class PulseConfig(
     val maxMagnitude: Float = 128f,
     val heightScale: Float = 1f,
     val smoothing: Float = 0.2f,
-    val useMovingAverage: Boolean = false,
+    val useMovingAverage: Boolean = true,
     val movingAverageWindowSize: Int = 2,
     val mirror: Boolean = false,
 

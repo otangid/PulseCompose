@@ -152,11 +152,11 @@ internal class NeonPulseState {
             lastColorArgb = colorArgb
             lastGlowRadius = glowRadius
 
-            val r = barColor.red.toInt()
-            val g = barColor.green.toInt()
-            val b = barColor.blue.toInt()
+            val r = android.graphics.Color.red(colorArgb)
+            val g = android.graphics.Color.green(colorArgb)
+            val b = android.graphics.Color.blue(colorArgb)
 
-            glowPaint.color = Color(r, g, b, glowAlpha).toArgb()
+            glowPaint.color = android.graphics.Color.argb(glowAlpha, r, g, b)
             glowPaint.maskFilter = BlurMaskFilter(glowRadius, BlurMaskFilter.Blur.NORMAL)
         }
 
