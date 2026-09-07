@@ -12,55 +12,77 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import otang.id.lib.pulse.FftSmoother
+import otang.id.lib.pulse.FftUtils
+import otang.id.lib.pulse.PulseConfig
 
 @Composable
 fun MinimalRenderer(
     fft: ByteArray,
-    barColor: Color? = null,
-    barCount: Int = 32,
-    maxMagnitude: Float = 128f,
-    heightScale: Float = 1f,
+    config: PulseConfig,
     modifier: Modifier
 ) {
-    val color = barColor ?: MaterialTheme.colorScheme.primary
+    val color = config.barColor ?: MaterialTheme.colorScheme.primary
     val rendererState = remember { MinimalPulseState() }
 
     Canvas(modifier = modifier.fillMaxSize()) {
         val width = size.width
         val height = size.height
 
-        if (width <= 0f || height <= 0f || barCount <= 0) return@Canvas
+        if (width <= 0f || height <= 0f || config.barCount <= 0) return@Canvas
 
-        rendererState.updateData(fft, barCount, height, maxMagnitude, heightScale)
-        rendererState.draw(this, width, height, color)
+        rendererState.updateData(fft, config.barCount, height, config)
+        rendererState.draw(
+            drawScope = this,
+            width = width,
+            height = height,
+            baseColor = color,
+            smoothing = config.smoothing,
+            strokeWidthScale = config.minimalConfig.strokeWidthScale,
+            alpha = config.minimalConfig.alpha
+        )
     }
 }
 
 internal class MinimalPulseState {
     private var currentHeights = FloatArray(0)
     private var targetHeights = FloatArray(0)
+    private val smoother = FftSmoother()
     private var pointsX = FloatArray(0)
     private var pointsY = FloatArray(0)
-
-    private val smoothing = 0.3f
     private val path = Path()
 
-    fun updateData(fft: ByteArray, barCount: Int, viewHeight: Float, maxMagnitude: Float, heightScale: Float) {
+    fun updateData(fft: ByteArray, barCount: Int, viewHeight: Float, config: PulseConfig) {
         if (targetHeights.size != barCount) {
             targetHeights = FloatArray(barCount)
             currentHeights = FloatArray(barCount) { 2f }
             pointsX = FloatArray(barCount)
             pointsY = FloatArray(barCount)
         }
-        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, targetHeights)
+        
+        var magnitudes = FloatArray(fft.size / 2)
+        FftUtils.calculateMagnitudes(fft, magnitudes)
+        
+        if (config.useMovingAverage) {
+            magnitudes = smoother.smooth(magnitudes, config.movingAverageWindowSize)
+        }
 
-        for (i in 0 until targetHeights.size) {
-            val normalized = targetHeights[i] / maxMagnitude
-            targetHeights[i] = (normalized * viewHeight * heightScale).coerceIn(2f, viewHeight)
+        for ((i, element) in magnitudes.withIndex()) {
+            if (i >= barCount) break
+            val normalized = element / config.maxMagnitude
+            targetHeights[i] = (normalized * viewHeight * config.heightScale).coerceIn(2f, viewHeight)
         }
     }
 
-    fun draw(drawScope: DrawScope, width: Float, height: Float, baseColor: Color) {
+    fun draw(
+        drawScope: DrawScope,
+        width: Float,
+        height: Float,
+        baseColor: Color,
+        smoothing: Float,
+        strokeWidthScale: Float,
+        alpha: Float
+    ) {
         val count = currentHeights.size
         if (count <= 0) return
 
@@ -98,13 +120,13 @@ internal class MinimalPulseState {
 
             path.lineTo(pointsX[count - 1], pointsY[count - 1])
 
-            val strokeColor = baseColor.copy(alpha = 0.7f)
+            val strokeColor = baseColor.copy(alpha = alpha)
 
             drawScope.drawPath(
                 path = path,
                 color = strokeColor,
                 style = Stroke(
-                    width = 2.5f * drawScope.density,
+                    width = strokeWidthScale * drawScope.density,
                     cap = StrokeCap.Round,
                     join = StrokeJoin.Round
                 )

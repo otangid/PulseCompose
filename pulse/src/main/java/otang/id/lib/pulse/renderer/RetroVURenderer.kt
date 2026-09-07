@@ -10,24 +10,31 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.toArgb
+import otang.id.lib.pulse.FftSmoother
+import otang.id.lib.pulse.FftUtils
+import otang.id.lib.pulse.PulseConfig
 
 @Composable
 fun RetroVURenderer(
     fft: ByteArray,
-    barColor: Color? = null,
-    barCount: Int = 32,
-    maxMagnitude: Float = 128f,
-    heightScale: Float = 1f,
-    segmentCount: Int = 16,
+    config: PulseConfig,
     modifier: Modifier
 ) {
-    val color = barColor ?: MaterialTheme.colorScheme.primary
-    val state = remember(barCount, segmentCount) { RetroVUState(barCount, segmentCount) }
+    val color = config.barColor ?: MaterialTheme.colorScheme.primary
+    val state = remember(config.barCount, config.retroVUConfig.segmentCount) { 
+        RetroVUState(config.barCount, config.retroVUConfig.segmentCount) 
+    }
 
     Canvas(modifier = modifier.fillMaxSize()) {
-        state.updateData(fft, size.height, maxMagnitude, heightScale)
-        state.draw(this, size.width, size.height, color)
+        state.updateData(fft, size.height, config)
+        state.draw(
+            drawScope = this,
+            width = size.width,
+            height = size.height,
+            barColor = color,
+            smoothing = config.smoothing,
+            segmentGapPx = config.retroVUConfig.segmentGapPx
+        )
     }
 }
 
@@ -37,29 +44,37 @@ internal class RetroVUState(
 ) {
     private var currentHeights = FloatArray(0)
     private var targetHeights = FloatArray(0)
+    private val smoother = FftSmoother()
     private var segmentRects: Array<Array<Pair<Offset, Size>>> = emptyArray()
     private var lastW = 0f
     private var lastH = 0f
-    private val smoothing = 0.15f
-    private val backgroundColor = Color(40, 100, 100, 100).toArgb()
+    private var lastSegGap = 0f
 
-    fun updateData(fft: ByteArray, viewHeight: Float, maxMagnitude: Float, heightScale: Float) {
+    fun updateData(fft: ByteArray, viewHeight: Float, config: PulseConfig) {
         if (targetHeights.size != barCount) {
             targetHeights = FloatArray(barCount)
             currentHeights = FloatArray(barCount) { 2f }
         }
-        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, targetHeights)
+        
+        var magnitudes = FloatArray(fft.size / 2)
+        FftUtils.calculateMagnitudes(fft, magnitudes)
+        
+        if (config.useMovingAverage) {
+            magnitudes = smoother.smooth(magnitudes, config.movingAverageWindowSize)
+        }
 
-        for (i in 0 until targetHeights.size) {
-            val normalized = targetHeights[i] / maxMagnitude
-            targetHeights[i] = (normalized * viewHeight * heightScale).coerceIn(2f, viewHeight)
+        for ((i, element) in magnitudes.withIndex()) {
+            if (i >= barCount) break
+            val normalized = element / config.maxMagnitude
+            targetHeights[i] = (normalized * viewHeight * config.heightScale).coerceIn(2f, viewHeight)
         }
     }
 
-    private fun updateLayout(width: Float, height: Float) {
-        if (width == lastW && height == lastH) return
+    private fun updateLayout(width: Float, height: Float, segmentGapPx: Float) {
+        if (width == lastW && height == lastH && segmentGapPx == lastSegGap) return
         lastW = width
         lastH = height
+        lastSegGap = segmentGapPx
 
         val barWidth = width / barCount
         val segHeight = height / segmentCount
@@ -68,14 +83,13 @@ internal class RetroVUState(
             Array(segmentCount) { j ->
                 val x = i * barWidth
                 val y = height - ((j + 1) * segHeight)
-                Offset(x + 2f, y + 2f) to Size(barWidth - 4f, segHeight - 4f)
+                Offset(x + segmentGapPx / 2f, y + segmentGapPx / 2f) to Size(barWidth - segmentGapPx, segHeight - segmentGapPx)
             }
         }
     }
 
-    fun draw(drawScope: DrawScope, width: Float, height: Float, barColor: Color) {
-        updateLayout(width, height)
-        val unlitSegments = (0.5f * segmentCount).toInt()
+    fun draw(drawScope: DrawScope, width: Float, height: Float, barColor: Color, smoothing: Float, segmentGapPx: Float) {
+        updateLayout(width, height, segmentGapPx)
 
         for (i in 0 until barCount) {
             val target = targetHeights.getOrElse(i) { 2f }
@@ -94,7 +108,6 @@ internal class RetroVUState(
 
                 val color = when {
                     seg <= litSegments -> barColor
-                    seg < unlitSegments -> Color(backgroundColor)
                     else -> Color.Transparent
                 }
 

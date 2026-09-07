@@ -11,7 +11,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -19,10 +21,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
@@ -69,6 +74,7 @@ fun PulseTest() {
 
     var isPlaying by remember { mutableStateOf(false) }
     var audioSessionId by remember { mutableIntStateOf(0) }
+    var useMovingAverage by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -92,7 +98,7 @@ fun PulseTest() {
     }
 
     val renderers = PulseRenderer.entries
-    var rendererIndex by remember { mutableStateOf(renderers.indexOf(PulseRenderer.WaveForm).toFloat()) }
+    var rendererIndex by remember { mutableFloatStateOf(renderers.indexOf(PulseRenderer.WaveForm).toFloat()) }
     val currentRenderer = renderers[rendererIndex.toInt().coerceIn(0, renderers.size - 1)]
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -109,8 +115,14 @@ fun PulseTest() {
                 if (hasPermission) {
                     PulseView(
                         audioSessionId = audioSessionId,
-                        modifier = Modifier.fillMaxSize(),
-                        config = PulseConfig(renderer = currentRenderer)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f),
+                        config = PulseConfig(
+                            renderer = currentRenderer,
+                            useMovingAverage = useMovingAverage
+                        ),
+                        isPlaying = isPlaying
                     )
                 } else {
                     Box(
@@ -148,7 +160,17 @@ fun PulseTest() {
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
 
-                Spacer(modifier = Modifier.padding(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                ) {
+                    Text("Moving Average Smoothing", fontSize = 14.sp)
+                    Spacer(modifier = Modifier.padding(4.dp))
+                    Switch(
+                        checked = useMovingAverage,
+                        onCheckedChange = { useMovingAverage = it }
+                    )
+                }
 
                 Text(text = "Now Playing: SoundHelix-Song-1.mp3")
 

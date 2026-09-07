@@ -9,32 +9,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import otang.id.lib.pulse.FftSmoother
+import otang.id.lib.pulse.FftUtils
+import otang.id.lib.pulse.PulseConfig
 
 @Composable
 fun WaveFormRenderer(
     fft: ByteArray,
-    barColor: Color? = null,
-    barCount: Int = 32,
-    maxMagnitude: Float = 128f,
-    heightScale: Float = 1f,
-    showOutline: Boolean = true,
-    showFill: Boolean = true,
+    config: PulseConfig,
     modifier: Modifier
 ) {
-    val color = barColor ?: MaterialTheme.colorScheme.primary
-    val state = remember(barCount) { WaveformPulseState(barCount) }
+    val color = config.barColor ?: MaterialTheme.colorScheme.primary
+    val state = remember(config.barCount) { WaveformPulseState(config.barCount) }
 
     Canvas(modifier = modifier.fillMaxSize()) {
-        state.update(fft, size.height, maxMagnitude, heightScale)
+        state.update(fft, size.height, config)
         state.draw(
             drawScope = this,
             width = size.width,
             height = size.height,
             color = color,
-            showOutline = showOutline,
-            showFill = showFill
+            smoothing = config.smoothing,
+            showOutline = config.waveFormConfig.showOutline,
+            showFill = config.waveFormConfig.showFill,
+            fillAlpha = config.waveFormConfig.fillAlpha,
+            strokeWidthScale = config.waveFormConfig.strokeWidthScale
         )
     }
 }
@@ -42,31 +44,42 @@ fun WaveFormRenderer(
 internal class WaveformPulseState(private val barCount: Int) {
     private var currentHeights = FloatArray(0)
     private var targetHeights = FloatArray(0)
-    private val smoothing = 0.2f
+    
+    private val smoother = FftSmoother()
 
     private val waveformPath = Path()
     private val fillPath = Path()
 
-    fun update(fft: ByteArray, viewHeight: Float, maxMagnitude: Float, heightScale: Float) {
+    fun update(fft: ByteArray, viewHeight: Float, config: PulseConfig) {
         if (targetHeights.size != barCount) {
             targetHeights = FloatArray(barCount)
             currentHeights = FloatArray(barCount) { 2f }
         }
-        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, targetHeights)
+        
+        var magnitudes = FloatArray(fft.size / 2)
+        FftUtils.calculateMagnitudes(fft, magnitudes)
+        
+        if (config.useMovingAverage) {
+            magnitudes = smoother.smooth(magnitudes, config.movingAverageWindowSize)
+        }
 
-        for (i in 0 until targetHeights.size) {
-            val normalized = targetHeights[i] / maxMagnitude
-            targetHeights[i] = (normalized * viewHeight * heightScale).coerceIn(2f, viewHeight)
+        for ((i, element) in magnitudes.withIndex()) {
+            if (i >= barCount) break
+            val normalized = element / config.maxMagnitude
+            targetHeights[i] = (normalized * viewHeight * config.heightScale).coerceIn(2f, viewHeight)
         }
     }
 
     fun draw(
-        drawScope: androidx.compose.ui.graphics.drawscope.DrawScope,
+        drawScope: DrawScope,
         width: Float,
         height: Float,
         color: Color,
+        smoothing: Float,
         showOutline: Boolean,
-        showFill: Boolean
+        showFill: Boolean,
+        fillAlpha: Float,
+        strokeWidthScale: Float
     ) {
         val count = currentHeights.size
         if (count < 2) return
@@ -105,7 +118,7 @@ internal class WaveformPulseState(private val barCount: Int) {
         if (showFill) {
             drawScope.drawPath(
                 path = fillPath,
-                color = color.copy(alpha = 0.3f),
+                color = color.copy(alpha = fillAlpha),
                 style = Fill
             )
         }
@@ -115,7 +128,7 @@ internal class WaveformPulseState(private val barCount: Int) {
                 path = waveformPath,
                 color = color,
                 style = Stroke(
-                    width = 3f * drawScope.density,
+                    width = strokeWidthScale * drawScope.density,
                     cap = StrokeCap.Round
                 )
             )

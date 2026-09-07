@@ -14,22 +14,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
+import otang.id.lib.pulse.FftSmoother
+import otang.id.lib.pulse.FftUtils
+import otang.id.lib.pulse.PulseConfig
 import android.graphics.Canvas as NativeCanvas
 import android.graphics.Paint as NativePaint
 
 @Composable
 fun FadingBlockRenderer(
     fft: ByteArray,
-    barColor: Color? = null,
-    barCount: Int = 32,
-    maxMagnitude: Float = 128f,
-    heightScale: Float = 1f,
-    barGapPx: Float = 2f,
-    filledBlockSize: Float = 0f,
-    emptyBlockSize: Float = 0f,
+    config: PulseConfig,
     modifier: Modifier
 ) {
-    val color = barColor ?: MaterialTheme.colorScheme.primary
+    val color = config.barColor ?: MaterialTheme.colorScheme.primary
     val bufferWrapper = remember { FadingPulseBuffer() }
 
     Canvas(modifier = modifier.fillMaxSize()) {
@@ -40,21 +37,17 @@ fun FadingBlockRenderer(
 
         bufferWrapper.checkAndResize(width, height)
 
-        val totalGap = (barCount - 1) * barGapPx
-        val barWidth = if (barCount > 0) ((width - totalGap) / barCount.toFloat()).coerceAtLeast(1f) else 0f
-        val fullBarWidth = barWidth + barGapPx
+        val totalGap = (config.barCount - 1) * config.fadingBlockConfig.barGapPx
+        val barWidth = if (config.barCount > 0) ((width - totalGap) / config.barCount.toFloat()).coerceAtLeast(1f) else 0f
+        val fullBarWidth = barWidth + config.fadingBlockConfig.barGapPx
 
         bufferWrapper.updateFadeAndDrawLines(
             fft = fft,
             barColor = color,
-            barCount = barCount,
+            config = config,
             barWidth = barWidth,
             fullBarWidth = fullBarWidth,
-            filledBlockSize = filledBlockSize,
-            emptyBlockSize = emptyBlockSize,
-            canvasHeight = height.toFloat(),
-            maxMagnitude = maxMagnitude,
-            heightScale = heightScale
+            canvasHeight = height.toFloat()
         )
 
         bufferWrapper.bitmap?.let { bmp ->
@@ -66,26 +59,22 @@ fun FadingBlockRenderer(
 internal class FadingPulseBuffer {
     var bitmap: Bitmap? = null
     private var nativeCanvas: NativeCanvas? = null
-
     private val fadePaint = NativePaint().apply {
-        color = android.graphics.Color.argb(200, 255, 255, 255)
         xfermode = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY)
     }
-
     private val linePaint = NativePaint(NativePaint.ANTI_ALIAS_FLAG).apply {
         style = NativePaint.Style.STROKE
         strokeCap = NativePaint.Cap.BUTT
     }
-
     private var fftPoints = FloatArray(0)
     private var lastW = 0
     private var lastH = 0
-
     private var lastColorArgb = 0
     private var lastFilled = -1f
     private var lastEmpty = -1f
-
+    private var lastFadeAlpha = -1
     private var magnitudes = FloatArray(0)
+    private val smoother = FftSmoother()
 
     fun checkAndResize(width: Int, height: Int) {
         if (width != lastW || height != lastH) {
@@ -100,25 +89,34 @@ internal class FadingPulseBuffer {
     fun updateFadeAndDrawLines(
         fft: ByteArray,
         barColor: Color,
-        barCount: Int,
+        config: PulseConfig,
         barWidth: Float,
         fullBarWidth: Float,
-        filledBlockSize: Float,
-        emptyBlockSize: Float,
-        canvasHeight: Float,
-        maxMagnitude: Float,
-        heightScale: Float
+        canvasHeight: Float
     ) {
+        val barCount = config.barCount
+        val filledBlockSize = config.fadingBlockConfig.filledBlockSize
+        val emptyBlockSize = config.fadingBlockConfig.emptyBlockSize
+        val maxMagnitude = config.maxMagnitude
+        val heightScale = config.heightScale
+        val fadeAlpha = config.fadingBlockConfig.fadeAlpha
+
         val canvas = nativeCanvas ?: return
         if (magnitudes.size != barCount) {
             magnitudes = FloatArray(barCount)
         }
-        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, magnitudes)
-        val heights = magnitudes
+        
+        var heights = FloatArray(fft.size / 2)
+        FftUtils.calculateMagnitudes(fft, heights)
+        
+        if (config.useMovingAverage) {
+            heights = smoother.smooth(heights, config.movingAverageWindowSize)
+        }
+
         val count = minOf(heights.size, barCount)
         if (count <= 0) return
 
-        for (i in 0 until heights.size) {
+        for (i in 0 until count) {
             val normalized = heights[i] / maxMagnitude
             heights[i] = (normalized * canvasHeight * heightScale).coerceIn(2f, canvasHeight)
         }
@@ -133,6 +131,11 @@ internal class FadingPulseBuffer {
             linePaint.pathEffect = DashPathEffect(floatArrayOf(filledBlockSize, emptyBlockSize), 0f)
             lastFilled = filledBlockSize
             lastEmpty = emptyBlockSize
+        }
+
+        if (fadeAlpha != lastFadeAlpha) {
+            fadePaint.color = Color(255, 255, 255, fadeAlpha).toArgb()
+            lastFadeAlpha = fadeAlpha
         }
 
         linePaint.strokeWidth = barWidth

@@ -9,6 +9,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import otang.id.lib.pulse.FftSmoother
+import otang.id.lib.pulse.FftUtils
+import otang.id.lib.pulse.PulseConfig
 import kotlin.math.max
 import kotlin.random.Random
 import android.graphics.Canvas as NativeCanvas
@@ -17,10 +20,7 @@ import android.graphics.Paint as NativePaint
 @Composable
 fun MatrixRenderer(
     fft: ByteArray,
-    barCount: Int = 32,
-    maxMagnitude: Float = 128f,
-    heightScale: Float = 1f,
-    barGapPx: Float = 2f,
+    config: PulseConfig,
     modifier: Modifier
 ) {
     val matrixState = remember { MatrixPulseState() }
@@ -29,75 +29,66 @@ fun MatrixRenderer(
         val width = size.width
         val height = size.height
 
-        if (width <= 0 || height <= 0 || barCount <= 0) return@Canvas
+        if (width <= 0 || height <= 0 || config.barCount <= 0) return@Canvas
 
-        matrixState.checkAndResize(width, height, barCount, barGapPx)
+        matrixState.checkAndResize(width, height, config.barCount, config.matrixConfig.barGapPx)
 
-        matrixState.updateData(fft, height, maxMagnitude, heightScale)
+        matrixState.updateData(fft, height, config)
 
         drawIntoCanvas { canvas ->
-            matrixState.draw(canvas.nativeCanvas, height)
+            matrixState.draw(
+                canvas = canvas.nativeCanvas,
+                viewHeight = height,
+                smoothing = config.smoothing,
+                brightGreen = config.matrixConfig.brightGreen,
+                mediumGreen = config.matrixConfig.mediumGreen,
+                darkGreen = config.matrixConfig.darkGreen,
+                glowAlpha = config.matrixConfig.glowAlpha,
+                changeInterval = config.matrixConfig.changeInterval
+            )
         }
     }
 }
 
 internal class MatrixPulseState {
-    private val brightGreen = android.graphics.Color.argb(255, 0, 255, 65)
-    private val mediumGreen = android.graphics.Color.argb(200, 0, 220, 55)
-    private val darkGreen = android.graphics.Color.argb(120, 0, 160, 40)
-
     private val glowPaint = NativePaint(NativePaint.ANTI_ALIAS_FLAG).apply {
         style = NativePaint.Style.FILL
         maskFilter = BlurMaskFilter(18f, BlurMaskFilter.Blur.NORMAL)
     }
-
     private val brightTextPaint = NativePaint(NativePaint.ANTI_ALIAS_FLAG).apply {
-        color = brightGreen
         textAlign = NativePaint.Align.CENTER
         typeface = Typeface.MONOSPACE
         style = NativePaint.Style.FILL
     }
-
     private val mediumTextPaint = NativePaint(NativePaint.ANTI_ALIAS_FLAG).apply {
-        color = mediumGreen
         textAlign = NativePaint.Align.CENTER
         typeface = Typeface.MONOSPACE
         style = NativePaint.Style.FILL
     }
-
     private val darkTextPaint = NativePaint(NativePaint.ANTI_ALIAS_FLAG).apply {
-        color = darkGreen
         textAlign = NativePaint.Align.CENTER
         typeface = Typeface.MONOSPACE
         style = NativePaint.Style.FILL
     }
-
     private val textGlowPaint = NativePaint(NativePaint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.argb(150, 0, 255, 65)
         textAlign = NativePaint.Align.CENTER
         typeface = Typeface.MONOSPACE
         style = NativePaint.Style.FILL
         maskFilter = BlurMaskFilter(8f, BlurMaskFilter.Blur.NORMAL)
     }
-
     private var barColumns: Array<MatrixColumn> = emptyArray()
     private var currentHeights = FloatArray(0)
     private var targetHeights = FloatArray(0)
-
+    private val smoother = FftSmoother()
     private var lastW = 0f
     private var lastH = 0f
     private var lastBarCount = 0
     private var lastGapPx = 0f
-
     private var columnWidth = 0f
     private var charSize = 0f
     private var maxCharsPerColumn = 0
-
-    private val smoothing = 0.22f
     private val numbers = arrayOf("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
-
     private var changeCounter = 0
-    private val changeInterval = 3
 
     fun checkAndResize(width: Float, height: Float, barCount: Int, gapPx: Float) {
         if (width != lastW || height != lastH || barCount != lastBarCount || gapPx != lastGapPx) {
@@ -128,21 +119,42 @@ internal class MatrixPulseState {
         }
     }
 
-    fun updateData(fft: ByteArray, viewHeight: Float, maxMagnitude: Float, heightScale: Float) {
+    fun updateData(fft: ByteArray, viewHeight: Float, config: PulseConfig) {
         if (targetHeights.size != lastBarCount) {
             targetHeights = FloatArray(lastBarCount)
             currentHeights = FloatArray(lastBarCount) { 2f }
         }
-        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, targetHeights)
+        
+        var magnitudes = FloatArray(fft.size / 2)
+        FftUtils.calculateMagnitudes(fft, magnitudes)
+        
+        if (config.useMovingAverage) {
+            magnitudes = smoother.smooth(magnitudes, config.movingAverageWindowSize)
+        }
 
-        for (i in 0 until targetHeights.size) {
-            val normalized = targetHeights[i] / maxMagnitude
-            targetHeights[i] = (normalized * viewHeight * heightScale).coerceIn(2f, viewHeight)
+        for ((i, element) in magnitudes.withIndex()) {
+            if (i >= lastBarCount) break
+            val normalized = element / config.maxMagnitude
+            targetHeights[i] = (normalized * viewHeight * config.heightScale).coerceIn(2f, viewHeight)
         }
     }
 
-    fun draw(canvas: NativeCanvas, viewHeight: Float) {
+    fun draw(
+        canvas: NativeCanvas,
+        viewHeight: Float,
+        smoothing: Float,
+        brightGreen: Int,
+        mediumGreen: Int,
+        darkGreen: Int,
+        glowAlpha: Int,
+        changeInterval: Int
+    ) {
         val count = minOf(lastBarCount, barColumns.size, currentHeights.size, targetHeights.size)
+
+        brightTextPaint.color = brightGreen
+        mediumTextPaint.color = mediumGreen
+        darkTextPaint.color = darkGreen
+        textGlowPaint.color = brightGreen
 
         for (i in 0 until count) {
             val target = targetHeights[i]
@@ -178,9 +190,9 @@ internal class MatrixPulseState {
 
             val glowWidth = columnWidth * 0.85f
             val heightRatio = height / viewHeight
-            val glowAlpha = (160 * heightRatio).toInt().coerceIn(0, 160)
+            val currentGlowAlpha = (glowAlpha * heightRatio).toInt().coerceIn(0, 255)
 
-            glowPaint.color = android.graphics.Color.argb(glowAlpha, 0, 200, 50)
+            glowPaint.color = (currentGlowAlpha shl 24) or (brightGreen and 0x00FFFFFF)
             canvas.drawRect(
                 x - glowWidth / 2f,
                 viewHeight - height,
@@ -203,7 +215,7 @@ internal class MatrixPulseState {
 
                 if (fadeRatio < 0.4f) {
                     val glowStrength = ((1f - fadeRatio * 2.5f) * 200).toInt().coerceIn(0, 200)
-                    textGlowPaint.color = android.graphics.Color.argb(glowStrength, 0, 255, 65)
+                    textGlowPaint.alpha = glowStrength
                     canvas.drawText(char, x, y, textGlowPaint)
                 }
 

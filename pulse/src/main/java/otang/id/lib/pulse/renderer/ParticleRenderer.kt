@@ -10,6 +10,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import otang.id.lib.pulse.FftSmoother
+import otang.id.lib.pulse.FftUtils
+import otang.id.lib.pulse.PulseConfig
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
@@ -19,12 +22,10 @@ import android.graphics.Paint as NativePaint
 @Composable
 fun ParticleRenderer(
     fft: ByteArray,
-    barColor: Color? = null,
-    maxMagnitude: Float = 128f,
-    heightScale: Float = 1f,
+    config: PulseConfig,
     modifier: Modifier
 ) {
-    val color = barColor ?: MaterialTheme.colorScheme.primary
+    val color = config.barColor ?: MaterialTheme.colorScheme.primary
     val particleState = remember { ParticlePulseState() }
 
     Canvas(modifier = modifier.fillMaxSize()) {
@@ -33,7 +34,12 @@ fun ParticleRenderer(
 
         if (width <= 0f || height <= 0f) return@Canvas
 
-        particleState.update(fft, width, height, maxMagnitude, heightScale)
+        particleState.update(
+            fft = fft,
+            width = width,
+            height = height,
+            config = config
+        )
 
         drawIntoCanvas { canvas ->
             particleState.draw(canvas.nativeCanvas, color)
@@ -41,15 +47,11 @@ fun ParticleRenderer(
     }
 }
 
-internal class ParticlePulseState(
-    maxParticles: Int = 300,
-    private val decayRate: Float = 0.012f,
-    private val audioGate: Float = 0.05f
-) {
+internal class ParticlePulseState {
     private val paint = NativePaint(NativePaint.ANTI_ALIAS_FLAG).apply { style = NativePaint.Style.FILL }
-    private val particles = Array(maxParticles) { Particle() }
+    private var particles = emptyArray<Particle>()
     private var magnitudes = FloatArray(0)
-
+    private val smoother = FftSmoother()
     private var bassIntensity = 0f
     private var midIntensity = 0f
     private var trebleIntensity = 0f
@@ -64,12 +66,31 @@ internal class ParticlePulseState(
         var life = 0f
     }
 
-    fun update(fft: ByteArray, width: Float, height: Float, maxMagnitude: Float, heightScale: Float) {
+    fun update(
+        fft: ByteArray,
+        width: Float,
+        height: Float,
+        config: PulseConfig
+    ) {
+        val maxParticles = config.particleConfig.maxParticles
+        val decayRate = config.particleConfig.decayRate
+        val audioGate = config.particleConfig.audioGate
+        val maxMagnitude = config.maxMagnitude
+        val heightScale = config.heightScale
+
+        if (particles.size != maxParticles) {
+            particles = Array(maxParticles) { Particle() }
+        }
+
         if (magnitudes.size != fft.size / 2) {
             magnitudes = FloatArray(fft.size / 2)
         }
-        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, magnitudes)
-        val heights = magnitudes
+        FftUtils.calculateMagnitudes(fft, magnitudes)
+        
+        var heights = magnitudes
+        if (config.useMovingAverage) {
+            heights = smoother.smooth(heights, config.movingAverageWindowSize)
+        }
 
         if (heights.size >= 4) {
             val currentMax = heights.maxOrNull() ?: 1f

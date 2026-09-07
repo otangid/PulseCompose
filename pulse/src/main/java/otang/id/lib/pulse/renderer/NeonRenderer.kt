@@ -11,6 +11,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import otang.id.lib.pulse.FftSmoother
+import otang.id.lib.pulse.FftUtils
+import otang.id.lib.pulse.PulseConfig
 import kotlin.math.max
 import android.graphics.Canvas as NativeCanvas
 import android.graphics.Paint as NativePaint
@@ -18,27 +21,30 @@ import android.graphics.Paint as NativePaint
 @Composable
 fun NeonRenderer(
     fft: ByteArray,
-    barColor: Color? = null,
-    barCount: Int = 32,
-    maxMagnitude: Float = 128f,
-    heightScale: Float = 1f,
-    barGapPx: Float = 2f,
+    config: PulseConfig,
     modifier: Modifier
 ) {
-    val color = barColor ?: MaterialTheme.colorScheme.primary
+    val color = config.barColor ?: MaterialTheme.colorScheme.primary
     val neonState = remember { NeonPulseState() }
 
     Canvas(modifier = modifier.fillMaxSize()) {
         val width = size.width
         val height = size.height
 
-        if (width <= 0f || height <= 0f || barCount <= 0) return@Canvas
+        if (width <= 0f || height <= 0f || config.barCount <= 0) return@Canvas
 
-        neonState.checkAndResize(width, height, barCount, gapPx = barGapPx)
-        neonState.updateData(fft, height, maxMagnitude, heightScale)
+        neonState.checkAndResize(width, height, config.barCount, gapPx = config.neonConfig.barGapPx)
+        neonState.updateData(fft, height, config)
 
         drawIntoCanvas { canvas ->
-            neonState.draw(canvas.nativeCanvas, height, color)
+            neonState.draw(
+                canvas = canvas.nativeCanvas,
+                viewHeight = height,
+                barColor = color,
+                smoothing = config.smoothing,
+                glowAlpha = config.neonConfig.glowAlpha,
+                glowRadius = config.neonConfig.glowRadius
+            )
         }
     }
 }
@@ -48,24 +54,21 @@ internal class NeonPulseState {
         style = NativePaint.Style.STROKE
         strokeCap = NativePaint.Cap.ROUND
     }
-
     private val corePaint = NativePaint(NativePaint.ANTI_ALIAS_FLAG).apply {
         style = NativePaint.Style.STROKE
         strokeCap = NativePaint.Cap.ROUND
-        color = android.graphics.Color.argb(255, 255, 255, 255)
+        color = Color(255, 255, 255, 255).toArgb()
     }
-
     private var pointsX = FloatArray(0)
     private var currentHeights = FloatArray(0)
     private var targetHeights = FloatArray(0)
-
+    private val smoother = otang.id.lib.pulse.FftSmoother()
     private var lastW = 0f
     private var lastH = 0f
     private var lastBarCount = 0
     private var lastGapPx = 0f
     private var lastColorArgb = 0
-
-    private val smoothing = 0.25f
+    private var lastGlowRadius = 0f
 
     fun checkAndResize(width: Float, height: Float, barCount: Int, gapPx: Float) {
         if (width != lastW || height != lastH || barCount != lastBarCount || gapPx != lastGapPx) {
@@ -96,33 +99,48 @@ internal class NeonPulseState {
         }
     }
 
-    fun updateData(fft: ByteArray, viewHeight: Float, maxMagnitude: Float, heightScale: Float) {
+    fun updateData(fft: ByteArray, viewHeight: Float, config: PulseConfig) {
         if (targetHeights.size != lastBarCount) {
             targetHeights = FloatArray(lastBarCount)
             currentHeights = FloatArray(lastBarCount) { 2f }
         }
-        otang.id.lib.pulse.FftUtils.calculateMagnitudes(fft, targetHeights)
+        
+        var magnitudes = FloatArray(fft.size / 2)
+        FftUtils.calculateMagnitudes(fft, magnitudes)
+        
+        if (config.useMovingAverage) {
+            magnitudes = smoother.smooth(magnitudes, config.movingAverageWindowSize)
+        }
 
-        for (i in 0 until targetHeights.size) {
-            val normalized = targetHeights[i] / maxMagnitude
-            targetHeights[i] = (normalized * viewHeight * heightScale).coerceIn(2f, viewHeight)
+        for ((i, element) in magnitudes.withIndex()) {
+            if (i >= lastBarCount) break
+            val normalized = element / config.maxMagnitude
+            targetHeights[i] = (normalized * viewHeight * config.heightScale).coerceIn(2f, viewHeight)
         }
     }
 
-    fun draw(canvas: NativeCanvas, viewHeight: Float, barColor: Color) {
+    fun draw(
+        canvas: NativeCanvas,
+        viewHeight: Float,
+        barColor: Color,
+        smoothing: Float,
+        glowAlpha: Int,
+        glowRadius: Float
+    ) {
         val count = minOf(lastBarCount, currentHeights.size, pointsX.size)
         if (count <= 0) return
 
         val colorArgb = barColor.toArgb()
-        if (colorArgb != lastColorArgb) {
+        if (colorArgb != lastColorArgb || glowRadius != lastGlowRadius) {
             lastColorArgb = colorArgb
+            lastGlowRadius = glowRadius
 
-            val r = android.graphics.Color.red(colorArgb)
-            val g = android.graphics.Color.green(colorArgb)
-            val b = android.graphics.Color.blue(colorArgb)
+            val r = barColor.red.toInt()
+            val g = barColor.green.toInt()
+            val b = barColor.blue.toInt()
 
-            glowPaint.color = android.graphics.Color.argb(180, r, g, b)
-            glowPaint.maskFilter = BlurMaskFilter(12f, BlurMaskFilter.Blur.NORMAL)
+            glowPaint.color = Color(r, g, b, glowAlpha).toArgb()
+            glowPaint.maskFilter = BlurMaskFilter(glowRadius, BlurMaskFilter.Blur.NORMAL)
         }
 
         for (i in 0 until count) {
@@ -139,7 +157,6 @@ internal class NeonPulseState {
             val y0 = viewHeight - h
 
             canvas.drawLine(x, viewHeight, x, y0, glowPaint)
-
             canvas.drawLine(x, viewHeight, x, y0, corePaint)
         }
     }

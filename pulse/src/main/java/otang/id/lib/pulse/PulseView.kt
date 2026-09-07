@@ -1,7 +1,11 @@
 package otang.id.lib.pulse
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import otang.id.lib.pulse.renderer.*
 
 @Composable
@@ -9,12 +13,14 @@ fun PulseView(
     audioSessionId: Int,
     modifier: Modifier = Modifier,
     config: PulseConfig = PulseConfig(),
+    isPlaying: Boolean = true,
 ) {
     val pulseState = rememberPulseState(audioSessionId)
     PulseView(
         fft = pulseState.fft.value,
         modifier = modifier,
-        config = config
+        config = config,
+        isPlaying = isPlaying
     )
 }
 
@@ -23,95 +29,69 @@ fun PulseView(
     fft: ByteArray,
     modifier: Modifier = Modifier,
     config: PulseConfig = PulseConfig(),
+    isPlaying: Boolean = true,
 ) {
+    val alpha by animateFloatAsState(
+        targetValue = if (isPlaying) 1f else 0f,
+        animationSpec = tween(500),
+        label = "PulseViewAlpha"
+    )
+
+    val animatedModifier = modifier.graphicsLayer(alpha = alpha)
+
     when (config.renderer) {
         PulseRenderer.FadingBlock -> FadingBlockRenderer(
             fft = fft,
-            barColor = config.barColor,
-            barCount = config.barCount,
-            maxMagnitude = config.maxMagnitude,
-            heightScale = config.heightScale,
-            barGapPx = config.barGapPx,
-            filledBlockSize = config.filledBlockSize,
-            emptyBlockSize = config.emptyBlockSize,
-            modifier = modifier
+            config = config,
+            modifier = animatedModifier
         )
 
         PulseRenderer.Matrix -> MatrixRenderer(
             fft = fft,
-            barCount = config.barCount,
-            maxMagnitude = config.maxMagnitude,
-            heightScale = config.heightScale,
-            barGapPx = config.barGapPx,
-            modifier = modifier
+            config = config,
+            modifier = animatedModifier
         )
 
         PulseRenderer.Minimal -> MinimalRenderer(
             fft = fft,
-            barColor = config.barColor,
-            barCount = config.barCount,
-            maxMagnitude = config.maxMagnitude,
-            heightScale = config.heightScale,
-            modifier = modifier
+            config = config,
+            modifier = animatedModifier
         )
 
         PulseRenderer.Neon -> NeonRenderer(
             fft = fft,
-            barColor = config.barColor,
-            barCount = config.barCount,
-            maxMagnitude = config.maxMagnitude,
-            heightScale = config.heightScale,
-            barGapPx = config.barGapPx,
-            modifier = modifier
+            config = config,
+            modifier = animatedModifier
         )
 
         PulseRenderer.Particle -> ParticleRenderer(
             fft = fft,
-            barColor = config.barColor,
-            maxMagnitude = config.maxMagnitude,
-            heightScale = config.heightScale,
-            modifier = modifier
+            config = config,
+            modifier = animatedModifier
         )
 
         PulseRenderer.RetroVU -> RetroVURenderer(
             fft = fft,
-            barColor = config.barColor,
-            barCount = config.barCount,
-            maxMagnitude = config.maxMagnitude,
-            heightScale = config.heightScale,
-            segmentCount = config.segmentCount,
-            modifier = modifier
+            config = config,
+            modifier = animatedModifier
         )
 
         PulseRenderer.SolidLine -> SolidLineRenderer(
             fft = fft,
-            barColor = config.barColor,
-            barCount = config.barCount,
-            maxMagnitude = config.maxMagnitude,
-            heightScale = config.heightScale,
-            barGapPx = config.barGapPx,
-            isRoundedBarsEnabled = config.isRoundedBarsEnabled,
-            modifier = modifier
+            config = config,
+            modifier = animatedModifier
         )
 
         PulseRenderer.Sparkle -> SparkleRenderer(
             fft = fft,
-            barColor = config.barColor,
-            barCount = config.barCount,
-            maxMagnitude = config.maxMagnitude,
-            heightScale = config.heightScale,
-            modifier = modifier
+            config = config,
+            modifier = animatedModifier
         )
 
         PulseRenderer.WaveForm -> WaveFormRenderer(
             fft = fft,
-            barColor = config.barColor,
-            barCount = config.barCount,
-            maxMagnitude = config.maxMagnitude,
-            heightScale = config.heightScale,
-            showOutline = config.showOutline,
-            showFill = config.showFill,
-            modifier = modifier
+            config = config,
+            modifier = animatedModifier
         )
     }
 }
